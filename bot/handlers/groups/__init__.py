@@ -11,6 +11,8 @@ from .roulette import router as roulette_router
 from .weather import router as weather_router
 from .marriages import router as marriages_router
 from .relationships import router as relationships_router
+from .welcome_handlers import router as welcome_router
+from .module_management import router as module_mgmt_router
 
 router = Router()
 router.include_router(weather_router)
@@ -24,3 +26,5 @@ router.include_router(nicknames_router)
 router.include_router(profile_router)
 router.include_router(moderation_router)
 router.include_router(events_router)
+router.include_router(welcome_router)
+router.include_router(module_mgmt_router)

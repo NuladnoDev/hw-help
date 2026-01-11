@@ -1,16 +1,36 @@
 import asyncio
 import time
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from aiogram import types
 from supabase import create_client, Client
 from bot.config_reader import config
+import httpx
 
 # Инициализация клиента Supabase
 supabase: Client = create_client(
     config.supabase_url, 
     config.supabase_key.get_secret_value()
 )
+
+async def _retry_supabase_call(query_builder, retries=3, delay=1):
+    """
+    Вспомогательная функция для повторных попыток запроса к Supabase при ошибках сети/SSL.
+    """
+    last_exception = None
+    for attempt in range(retries):
+        try:
+            return await asyncio.to_thread(query_builder.execute)
+        except (httpx.ConnectError, httpx.RemoteProtocolError, Exception) as e:
+            last_exception = e
+            if attempt < retries - 1:
+                logging.warning(f"Попытка {attempt + 1} провалена: {e}. Повтор через {delay} сек...")
+                await asyncio.sleep(delay)
+                delay *= 2 # Экспоненциальное ожидание
+    
+    logging.error(f"Все {retries} попыток запроса провалены. Последняя ошибка: {last_exception}")
+    raise last_exception
 
 # Кэш для активности
 _activity_cache = {}
@@ -27,12 +47,12 @@ async def get_user_profile_data(user_id: int, chat_id: int) -> Dict[str, Any]:
     # 3. Получаем брак
     # 4. Проверяем наличие наград (счетчик)
     
-    # Запускаем параллельно основные запросы
+    # Запускаем параллельно основные запросы с ретраями
     tasks = [
-        asyncio.to_thread(supabase.table("users").select("*").eq("user_id", user_id).execute),
-        asyncio.to_thread(supabase.table("chat_members").select("rank").eq("chat_id", chat_id).eq("user_id", user_id).execute),
-        asyncio.to_thread(supabase.table("marriages").select("*").or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}").execute),
-        asyncio.to_thread(supabase.table("awards").select("id", count="exact").eq("chat_id", chat_id).eq("user_id", user_id).execute)
+        _retry_supabase_call(supabase.table("users").select("*").eq("user_id", user_id)),
+        _retry_supabase_call(supabase.table("chat_members").select("rank").eq("chat_id", chat_id).eq("user_id", user_id)),
+        _retry_supabase_call(supabase.table("marriages").select("*").or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}")),
+        _retry_supabase_call(supabase.table("awards").select("id", count="exact").eq("chat_id", chat_id).eq("user_id", user_id))
     ]
     
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -90,12 +110,19 @@ async def update_user_cache(user_id: int, username: Optional[str], full_name: Op
     if full_name:
         data["full_name"] = full_name
     
-    await asyncio.to_thread(supabase.table("users").upsert(data).execute)
+    try:
+        await _retry_supabase_call(supabase.table("users").upsert(data))
+    except Exception:
+        # Для кэша это не критично, можно просто залогировать
+        pass
 
 async def get_username_by_id(user_id: int) -> Optional[str]:
-    res = await asyncio.to_thread(supabase.table("users").select("username").eq("user_id", user_id).execute)
-    if res.data:
-        return res.data[0].get("username")
+    try:
+        res = await _retry_supabase_call(supabase.table("users").select("username").eq("user_id", user_id))
+        if res.data:
+            return res.data[0].get("username")
+    except Exception:
+        pass
     return None
 
 async def get_full_name_by_id(user_id: int) -> Optional[str]:
@@ -619,3 +646,50 @@ async def get_user_activity_summary(user_id: int) -> Dict[str, int]:
         summary["total"] = sum(item.get("count", 0) or 0 for item in res.data)
             
     return summary
+
+# --- Group Settings ---
+
+async def set_welcome_message(chat_id: int, message_text: str):
+    """Сохраняет текст приветствия для группы."""
+    await asyncio.to_thread(
+        supabase.table("group_settings").upsert({
+            "chat_id": chat_id,
+            "welcome_message": message_text
+        }).execute
+    )
+
+async def get_welcome_message(chat_id: int) -> Optional[str]:
+    """Получает текст приветствия для группы."""
+    res = await asyncio.to_thread(
+        supabase.table("group_settings").select("welcome_message").eq("chat_id", chat_id).execute
+    )
+    if res.data:
+        return res.data[0].get("welcome_message")
+    return None
+
+async def get_disabled_modules(chat_id: int) -> List[str]:
+    """Возвращает список идентификаторов выключенных модулей для чата."""
+    res = await asyncio.to_thread(
+        supabase.table("group_settings").select("disabled_modules").eq("chat_id", chat_id).execute
+    )
+    if res.data and res.data[0].get("disabled_modules"):
+        return res.data[0]["disabled_modules"]
+    return []
+
+async def toggle_module(chat_id: int, module_id: str, enable: bool):
+    """Включает или выключает модуль в группе."""
+    current_disabled = await get_disabled_modules(chat_id)
+    
+    if enable:
+        if module_id in current_disabled:
+            current_disabled.remove(module_id)
+    else:
+        if module_id not in current_disabled:
+            current_disabled.append(module_id)
+            
+    await asyncio.to_thread(
+        supabase.table("group_settings").upsert({
+            "chat_id": chat_id,
+            "disabled_modules": current_disabled
+        }).execute
+    )

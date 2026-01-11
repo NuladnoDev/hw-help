@@ -5,7 +5,7 @@ from aiogram.filters import BaseFilter
 from typing import Union
 from bot.config_reader import config
 
-from bot.utils.db_manager import get_rank, RANKS, get_user_rank_context
+from bot.utils.db_manager import get_rank, RANKS, get_user_rank_context, get_disabled_modules
 
 class AdminFilter(BaseFilter):
     """
@@ -31,8 +31,28 @@ class AdminFilter(BaseFilter):
             member = await event.bot.get_chat_member(chat.id, user_id)
             return member.status in ["administrator", "creator"]
         except Exception as e:
-            logging.error(f"Ошибка в AdminFilter: {e}")
+            logging.error(f"Ошибка в RankFilter: {e}")
             return False
+
+class ModuleEnabledFilter(BaseFilter):
+    """
+    Фильтр для проверки, включен ли модуль в данной группе.
+    """
+    def __init__(self, module_id: str):
+        self.module_id = module_id
+
+    async def __call__(self, event: Union[types.Message, types.CallbackQuery]) -> bool:
+        chat_id = event.chat.id if isinstance(event, types.Message) else event.message.chat.id
+        disabled_modules = await get_disabled_modules(chat_id)
+        
+        if self.module_id in disabled_modules:
+            # Если это сообщение, можно ответить, что модуль выключен
+            if isinstance(event, types.Message):
+                # Здесь можно ничего не отвечать, чтобы бот просто игнорировал команду
+                pass
+            return False
+            
+        return True
 
 class RankFilter(BaseFilter):
     """

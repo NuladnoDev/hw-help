@@ -5,8 +5,11 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.utils.db_manager import get_mention_by_id, update_user_cache
 from bot.handlers.groups.moderation import get_target_id
+from bot.utils.filters import ModuleEnabledFilter
 
 router = Router()
+router.message.filter(ModuleEnabledFilter(module_id="duels"))
+router.callback_query.filter(ModuleEnabledFilter(module_id="duels"))
 
 # Callback data для дуэлей
 class DuelAction(CallbackData, prefix="duel"):

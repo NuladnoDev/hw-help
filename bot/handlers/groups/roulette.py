@@ -2,8 +2,10 @@ import random
 import asyncio
 from aiogram import Router, types, F
 from bot.utils.db_manager import get_mention_by_id
+from bot.utils.filters import ModuleEnabledFilter
 
 router = Router()
+router.message.filter(ModuleEnabledFilter(module_id="roulette"))
 
 @router.message(F.text.lower() == "русская рулетка")
 async def handle_roulette_command(message: types.Message):
