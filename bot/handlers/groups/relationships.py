@@ -302,16 +302,16 @@ def get_relationship_level(total):
     if total < 200: return "Родственные души 💎"
     return "Неразлучная связь ♾"
 
-@router.message(lambda message: message.text and any(message.text.lower().strip().startswith(action) for action in SOCIAL_ACTIONS))
+@router.message(lambda message: (message.text or message.caption) and any((message.text or message.caption).lower().strip().startswith(action) for action in SOCIAL_ACTIONS))
 async def handle_social_action(message: types.Message):
-    text = message.text.lower().strip()
+    full_text = (message.text or message.caption).lower().strip()
     action_key = None
     
     # Сортируем ключи по длине, чтобы сначала проверялись более длинные (например "напоить водой")
     sorted_actions = sorted(SOCIAL_ACTIONS.keys(), key=len, reverse=True)
     
     for action in sorted_actions:
-        if text.startswith(action):
+        if full_text.startswith(action):
             action_key = action
             break
             

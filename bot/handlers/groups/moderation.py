@@ -26,7 +26,8 @@ async def get_target_id(message: types.Message, command_name: str):
     Универсальная функция для поиска ID пользователя/бота в сообщении.
     """
     target_user_id = None
-    command_args = message.text[len(command_name):].strip()
+    text = message.text or message.caption or ""
+    command_args = text[len(command_name):].strip()
 
     # 1. Ответ на сообщение
     if message.reply_to_message:
@@ -35,15 +36,16 @@ async def get_target_id(message: types.Message, command_name: str):
         return target_user.id, command_args
 
     # 2. Поиск в сущностях (упоминания)
-    if message.entities:
-        for entity in message.entities:
+    entities = message.entities or message.caption_entities
+    if entities:
+        for entity in entities:
             if entity.type == MessageEntityType.TEXT_MENTION and entity.user:
                 target_user = entity.user
                 await update_user_cache(target_user.id, target_user.username, target_user.full_name)
-                return target_user.id, command_args.replace(message.text[entity.offset:entity.offset+entity.length], "").strip()
+                return target_user.id, command_args.replace(text[entity.offset:entity.offset+entity.length], "").strip()
             
             if entity.type == MessageEntityType.MENTION:
-                mention_text = message.text[entity.offset:entity.offset+entity.length]
+                mention_text = text[entity.offset:entity.offset+entity.length]
                 # Проверяем кэш
                 cached_id = await get_user_id_by_username(mention_text)
                 if cached_id:
