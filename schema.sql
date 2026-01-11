@@ -77,3 +77,11 @@ CREATE TABLE IF NOT EXISTS relationships (
     actions JSONB DEFAULT '{}'::jsonb,
     PRIMARY KEY (user1_id, user2_id)
 );
+
+-- Статистика активности по дням
+CREATE TABLE IF NOT EXISTS activity_stats (
+    user_id BIGINT,
+    date DATE,
+    count INT DEFAULT 0,
+    PRIMARY KEY (user_id, date)
+);

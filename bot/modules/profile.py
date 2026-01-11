@@ -1,10 +1,14 @@
 from aiogram import types
 from bot.utils.db_manager import (
     get_mention_by_id, get_user_rank_context,
-    get_user_profile_data, get_group_rank_name
+    get_user_profile_data, get_group_rank_name,
+    get_user_activity_series
 )
 from bot.keyboards.profile_keyboards import get_profile_kb
 from datetime import datetime, timezone
+from io import BytesIO
+from typing import Optional
+from PIL import Image, ImageDraw, ImageFont
 
 def get_relative_time(dt: datetime) -> str:
     """
@@ -24,6 +28,83 @@ def get_relative_time(dt: datetime) -> str:
     else:
         days = seconds // 86400
         return f"{days} дн. назад"
+
+async def generate_activity_chart(user_id: int, days: int = 30) -> Optional[BytesIO]:
+    series = await get_user_activity_series(user_id, days=days)
+    if not series:
+        return None
+    
+    max_count = max(count for _, count in series) or 0
+    if max_count == 0:
+        return None
+    
+    width, height = 800, 400
+    margin_left, margin_right, margin_top, margin_bottom = 40, 38, 40, 60
+    plot_width = width - margin_left - margin_right
+    plot_height = height - margin_top - margin_bottom
+    
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    grid_color = (235, 235, 235)
+    axis_color = (120, 120, 120)
+    bar_color = (255, 140, 0)
+    
+    steps = 4
+    for i in range(steps + 1):
+        y = margin_top + int(plot_height * i / steps)
+        draw.line([(margin_left, y), (width - margin_right, y)], fill=grid_color)
+    
+    font = ImageFont.load_default()
+    title = "Статистика активности"
+    # Исправление для новых версий Pillow (textsize удален)
+    bbox = draw.textbbox((0, 0), title, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    draw.text(((width - tw) / 2, 10), title, fill=axis_color, font=font)
+    
+    # Вертикальная надпись "Сообщения" слева (или справа, вы просили "права" - вероятно справа)
+    y_label = "Сообщения"
+    # Создаем временное изображение для поворота текста
+    label_font = font
+    l_bbox = draw.textbbox((0, 0), y_label, font=label_font)
+    l_w = l_bbox[2] - l_bbox[0]
+    l_h = l_bbox[3] - l_bbox[1]
+    
+    # Рисуем вертикально справа
+    txt_img = Image.new("RGBA", (l_w, l_h + 5), (255, 255, 255, 0))
+    d = ImageDraw.Draw(txt_img)
+    d.text((0, 0), y_label, fill=axis_color, font=label_font)
+    rotated = txt_img.rotate(90, expand=True)
+    img.paste(rotated, (width - margin_right + 5, margin_top + (plot_height - l_w) // 2), rotated)
+    
+    n = len(series)
+    if n == 0:
+        return None
+    
+    bar_spacing = plot_width / max(n, 1)
+    bar_width = max(4, int(bar_spacing * 0.6))
+    
+    for idx, (day, count) in enumerate(series):
+        x_center = margin_left + int(bar_spacing * idx + bar_spacing / 2)
+        bar_height = int((count / max_count) * plot_height) if max_count > 0 else 0
+        x0 = x_center - bar_width // 2
+        x1 = x_center + bar_width // 2
+        y1 = margin_top + plot_height
+        y0 = y1 - bar_height
+        draw.rectangle([x0, y0, x1, y1], fill=bar_color)
+        
+        if idx % max(1, n // 10) == 0:
+            label = day.strftime("%d.%m")
+            bbox = draw.textbbox((0, 0), label, font=font)
+            lw = bbox[2] - bbox[0]
+            lh = bbox[3] - bbox[1]
+            draw.text((x_center - lw / 2, height - margin_bottom + 5), label, fill=axis_color, font=font)
+    
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
 
 async def get_user_profile(message: types.Message, target_user_id: int):
     """
@@ -63,7 +144,6 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     first_app_str = first_app_dt.strftime("%d.%m.%Y")
     
     profile_text = f"👤 Это пользователь {user_mention}\n\n"
-    
     profile_text += (
         f"🎖 <b>Ранг:</b> {rank_name}\n"
         f"💰 <b>Койнов на счету:</b> soon\n"
@@ -83,8 +163,19 @@ async def get_user_profile(message: types.Message, target_user_id: int):
         f"📊 <b>Статус:</b> {'Бот' if 'user' in locals() and getattr(user, 'is_bot', False) else 'Пользователь'}"
     )
     
-    await message.answer(
-        profile_text, 
-        parse_mode="HTML",
-        reply_markup=get_profile_kb(target_user_id, has_quote=bool(db_data.get("quote")))
-    )
+    chart = await generate_activity_chart(target_user_id)
+    
+    if chart:
+        photo = types.BufferedInputFile(chart.getvalue(), filename=f"chart_{target_user_id}.png")
+        await message.answer_photo(
+            photo=photo,
+            caption=profile_text,
+            parse_mode="HTML",
+            reply_markup=get_profile_kb(target_user_id, has_quote=bool(db_data.get("quote")))
+        )
+    else:
+        await message.answer(
+            profile_text,
+            parse_mode="HTML",
+            reply_markup=get_profile_kb(target_user_id, has_quote=bool(db_data.get("quote")))
+        )

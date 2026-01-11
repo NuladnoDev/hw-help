@@ -1,6 +1,6 @@
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from aiogram import types
 from supabase import create_client, Client
@@ -535,6 +535,30 @@ async def update_user_activity(user_id: int):
         "last_message": now_iso
     }).execute)
     
+    today = datetime.now(timezone.utc).date().isoformat()
+    res = await asyncio.to_thread(
+        supabase.table("activity_stats")
+        .select("count")
+        .eq("user_id", user_id)
+        .eq("date", today)
+        .execute
+    )
+    if res.data:
+        current = res.data[0].get("count", 0) or 0
+        await asyncio.to_thread(
+            supabase.table("activity_stats")
+            .update({"count": current + 1})
+            .eq("user_id", user_id)
+            .eq("date", today)
+            .execute
+        )
+    else:
+        await asyncio.to_thread(
+            supabase.table("activity_stats")
+            .insert({"user_id": user_id, "date": today, "count": 1})
+            .execute
+        )
+    
     _activity_cache[user_id] = now_ts
 
 async def get_user_stats(user_id: int) -> Dict:
@@ -546,3 +570,25 @@ async def get_user_stats(user_id: int) -> Dict:
         "last_message": datetime.now(timezone.utc).isoformat()
     }
 
+async def get_user_activity_series(user_id: int, days: int = 30) -> List[Tuple[datetime, int]]:
+    today = datetime.now(timezone.utc).date()
+    start_date = today - timedelta(days=days - 1)
+    
+    res = await asyncio.to_thread(
+        supabase.table("activity_stats")
+        .select("date,count")
+        .eq("user_id", user_id)
+        .gte("date", start_date.isoformat())
+        .order("date")
+        .execute
+    )
+    
+    raw = {datetime.fromisoformat(item["date"]).date(): item.get("count", 0) for item in (res.data or [])}
+    
+    series: List[Tuple[datetime, int]] = []
+    current = start_date
+    while current <= today:
+        series.append((current, raw.get(current, 0)))
+        current += timedelta(days=1)
+    
+    return series
