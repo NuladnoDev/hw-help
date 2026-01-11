@@ -6,7 +6,7 @@ from typing import Union
 from bot.config_reader import config
 
 from bot.utils.db_manager import (
-    get_rank, RANKS, get_user_rank_context, 
+    get_user_rank_context, RANKS,
     get_disabled_modules, get_permission_settings
 )
 
@@ -95,7 +95,17 @@ class RankFilter(BaseFilter):
         if required_rank is None:
             return True
             
-        return user_rank >= required_rank
+        result = user_rank >= required_rank
+        
+        # Если ранг недостаточен и это сообщение, уведомляем
+        if not result and isinstance(event, types.Message):
+            required_name = RANKS.get(required_rank, "Неизвестно")
+            await event.reply(
+                f"⚠️ Эта команда доступна с ранга [{required_rank}] <b>{required_name}</b>",
+                parse_mode="HTML"
+            )
+            
+        return result
 
 async def is_admin(message: types.Message) -> bool:
     """

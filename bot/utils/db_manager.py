@@ -557,36 +557,39 @@ async def update_user_activity(user_id: int):
         return
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    await asyncio.to_thread(supabase.table("users").upsert({
-        "user_id": user_id,
-        "last_message": now_iso
-    }).execute)
-    
-    today = datetime.now(timezone.utc).date().isoformat()
-    res = await asyncio.to_thread(
-        supabase.table("activity_stats")
-        .select("count")
-        .eq("user_id", user_id)
-        .eq("date", today)
-        .execute
-    )
-    if res.data:
-        current = res.data[0].get("count", 0) or 0
-        await asyncio.to_thread(
+    try:
+        await asyncio.to_thread(supabase.table("users").upsert({
+            "user_id": user_id,
+            "last_message": now_iso
+        }).execute)
+        
+        today = datetime.now(timezone.utc).date().isoformat()
+        res = await asyncio.to_thread(
             supabase.table("activity_stats")
-            .update({"count": current + 1})
+            .select("count")
             .eq("user_id", user_id)
             .eq("date", today)
             .execute
         )
-    else:
-        await asyncio.to_thread(
-            supabase.table("activity_stats")
-            .insert({"user_id": user_id, "date": today, "count": 1})
-            .execute
-        )
-    
-    _activity_cache[user_id] = now_ts
+        if res.data:
+            current = res.data[0].get("count", 0) or 0
+            await asyncio.to_thread(
+                supabase.table("activity_stats")
+                .update({"count": current + 1})
+                .eq("user_id", user_id)
+                .eq("date", today)
+                .execute
+            )
+        else:
+            await asyncio.to_thread(
+                supabase.table("activity_stats")
+                .insert({"user_id": user_id, "date": today, "count": 1})
+                .execute
+            )
+        
+        _activity_cache[user_id] = now_ts
+    except Exception as e:
+        logging.warning(f"Ошибка при обновлении активности (RLS/DB): {e}")
 
 async def get_user_stats(user_id: int) -> Dict:
     res = await asyncio.to_thread(supabase.table("users").select("first_appearance", "last_message").eq("user_id", user_id).execute)
