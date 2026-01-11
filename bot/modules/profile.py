@@ -31,12 +31,14 @@ def get_relative_time(dt: datetime) -> str:
 
 async def generate_activity_chart(user_id: int, days: int = 30) -> Optional[BytesIO]:
     series = await get_user_activity_series(user_id, days=days)
+    # Если данных вообще нет или все значения по нулям, создаем пустой график вместо None
     if not series:
         return None
     
     max_count = max(count for _, count in series) or 0
-    if max_count == 0:
-        return None
+    # Даже если активность нулевая, мы все равно рисуем пустую сетку, чтобы картинка была
+    # if max_count == 0:
+    #     return None
     
     width, height = 800, 400
     margin_left, margin_right, margin_top, margin_bottom = 40, 38, 40, 60
@@ -54,18 +56,34 @@ async def generate_activity_chart(user_id: int, days: int = 30) -> Optional[Byte
         y = margin_top + int(plot_height * i / steps)
         draw.line([(margin_left, y), (width - margin_right, y)], fill=grid_color)
     
-    font = ImageFont.load_default()
+    def get_font(size=14):
+        # Пути к шрифтам на Linux (хост) и Windows (локально)
+        fonts = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "C:\\Windows\\Fonts\\arial.ttf",
+            "arial.ttf"
+        ]
+        for f in fonts:
+            try:
+                return ImageFont.truetype(f, size)
+            except:
+                continue
+        return ImageFont.load_default()
+
+    font = get_font(14)
+    title_font = get_font(18)
+    label_font = get_font(14)
+    
     title = "Статистика активности"
     # Исправление для новых версий Pillow (textsize удален)
-    bbox = draw.textbbox((0, 0), title, font=font)
+    bbox = draw.textbbox((0, 0), title, font=title_font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
-    draw.text(((width - tw) / 2, 10), title, fill=axis_color, font=font)
+    draw.text(((width - tw) / 2, 10), title, fill=axis_color, font=title_font)
     
-    # Вертикальная надпись "Сообщения" слева (или справа, вы просили "права" - вероятно справа)
     y_label = "Сообщения"
     # Создаем временное изображение для поворота текста
-    label_font = font
     l_bbox = draw.textbbox((0, 0), y_label, font=label_font)
     l_w = l_bbox[2] - l_bbox[0]
     l_h = l_bbox[3] - l_bbox[1]
