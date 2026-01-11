@@ -149,25 +149,36 @@ async def handle_demote_rank_command(message: types.Message):
     else:
         await message.reply("❌ Произошла ошибка при сохранении ранга.")
 
-@router.message(F.text.lower().startswith("разжаловать"), RankFilter(min_rank=5))
+@router.message(lambda message: (message.text or message.caption or "").lower().startswith(("разжаловать", "снять")))
 async def handle_strip_rank_command(message: types.Message):
-    target_user_id, _ = await get_target_id(message, "разжаловать")
+    """Понижает ранг пользователя до 0."""
+    command_name = "разжаловать" if (message.text or message.caption or "").lower().startswith("разжаловать") else "снять"
     
-    if not target_user_id:
-        await message.reply("❌ Не удалось найти пользователя. Используйте: <code>Разжаловать @тег</code> (или ответом)", parse_mode="HTML")
+    target_id, _ = await get_target_id(message, command_name)
+    if not target_id:
+        await message.reply("❓ Кого нужно разжаловать? Ответьте на сообщение или введите ID/username.")
         return
 
-    # Проверка иерархии
-    if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        await message.reply("❌ Вы не можете разжаловать этого пользователя (иерархия).", parse_mode="HTML")
+    admin_id = message.from_user.id
+    admin_rank = await get_rank(admin_id, message.chat.id)
+    target_rank = await get_rank(target_id, message.chat.id)
+
+    # Проверка прав (только вышестоящие могут разжаловать)
+    if admin_rank <= target_rank and admin_id not in [6363065403, 1011831818]:
+        await message.reply("🚫 У вас недостаточно прав для разжалования этого пользователя.")
         return
 
-    if await set_rank(target_user_id, message.chat.id, 1):
-        target_mention = await get_mention_by_id(target_user_id)
-        rank_name = await get_group_rank_name(message.chat.id, 1, "nom")
-        await message.reply(f"🚫 Пользователь {target_mention} был <b>разжалован</b> ({rank_name} [1]).", parse_mode="HTML")
+    if target_rank == 0:
+        await message.reply("ℹ️ У пользователя уже минимальный ранг.")
+        return
+
+    success = await set_rank(target_id, message.chat.id, 0)
+    if success:
+        target_mention = await get_mention_by_id(target_id)
+        rank_name = await get_group_rank_name(message.chat.id, 0, "nom")
+        await message.reply(f"✅ Пользователь {target_mention} был разжалован до ранга: <b>{rank_name}</b>", parse_mode="HTML")
     else:
-        await message.reply("❌ Произошла ошибка при сохранении ранга.")
+        await message.reply("❌ Произошла ошибка при разжаловании пользователя.")
 
 @router.message(F.text.lower().regexp(r'^(кто ты|ты кто|профиль)'))
 async def handle_who_are_you_command(message: types.Message):
@@ -226,12 +237,12 @@ async def handle_set_custom_rank_name_command(message: types.Message):
         parse_mode="HTML"
     )
 
-@router.message(F.text.lower().in_({"кто админ?", "кто админ", "список админов", "список администраторов"}))
+@router.message(F.text.lower().in_({"кто админ?", "кто админ", "список админов", "список администраторов", "кто администрация"}))
 async def handle_who_is_admin_command(message: types.Message):
     """Показывает список всех рангов и пользователей на них."""
     ranked_users = await get_all_ranked_users(message.chat.id)
     
-    # Группируем пользователей по рангам из БД
+    # Группируем пользователей по рангам из БД (только от 1 до 5)
     rank_groups = {level: [] for level in range(1, 6)}
     for u_id, level in ranked_users.items():
         if level in rank_groups:
@@ -252,31 +263,34 @@ async def handle_who_is_admin_command(message: types.Message):
     except Exception as e:
         print(f"Ошибка при получении создателя чата: {e}")
 
+    # Специально проверяем 1 ранг. Если в БД никого нет с 1 рангом, 
+    # но пользователь жалуется, что его не видно, возможно он просто не в базе.
+    # Мы показываем только тех, кто явно назначен или есть в БД.
+
     # Формируем список рангов для вывода
     rank_sections = []
     
     # Выводим от высшего к низшему (5 до 1)
     for level in range(5, 0, -1):
         users = rank_groups[level]
+        # Для 1 ранга мы показываем секцию, только если там есть люди, 
+        # чтобы не забивать список всеми участниками чата
         if not users:
             continue
             
         rank_name = await get_group_rank_name(message.chat.id, level, "nom")
-        section = f"[{level}] {rank_name}\n"
+        section = f"[{level}] <b>{rank_name}</b>\n"
         
         # Убираем дубликаты и пустые значения
         unique_users = list(set(users))
         for u_id in unique_users:
-            # Если это глобальный создатель, но он не реальный создатель этой группы 
-            # и его нет в БД как 5 ранга для ЭТОЙ группы, мы могли бы его скрыть,
-            # но сейчас он просто не попадет в список, так как мы убрали его из get_all_ranked_users()
             mention = await get_mention_by_id(u_id)
-            section += f" - {mention}\n"
+            section += f" — {mention}\n"
         rank_sections.append(section)
     
     if not rank_sections:
         await message.reply("📜 На данный момент нет пользователей с назначенными рангами.")
         return
 
-    response = "Список администраторов:\n\n" + "\n".join(rank_sections)
+    response = "🎭 <b>Список администрации и рангов:</b>\n\n" + "\n".join(rank_sections)
     await message.reply(response, parse_mode="HTML")

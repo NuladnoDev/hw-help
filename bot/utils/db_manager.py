@@ -308,7 +308,8 @@ async def remove_award_by_index(chat_id: int, user_id: int, index: int) -> bool:
 # --- Ranks ---
 
 RANKS = {
-    1: "Обычный пользователь",
+    0: "Обычный пользователь",
+    1: "Помощник модератора",
     2: "Младший модератор",
     3: "Модератор",
     4: "Администратор",
@@ -317,7 +318,8 @@ RANKS = {
 
 # Падежи по умолчанию
 DEFAULT_RANK_CASES = {
-    1: {"nom": "Обычный пользователь", "gen": "Обычного пользователя", "ins": "Обычным пользователем"},
+    0: {"nom": "Обычный пользователь", "gen": "Обычного пользователя", "ins": "Обычным пользователем"},
+    1: {"nom": "Помощник модератора", "gen": "Помощника модератора", "ins": "Помощником модератора"},
     2: {"nom": "Младший модератор", "gen": "Младшего модератора", "ins": "Младшим модератором"},
     3: {"nom": "Модератор", "gen": "Модератора", "ins": "Модератором"},
     4: {"nom": "Администратор", "gen": "Администратора", "ins": "Администратором"},
@@ -359,12 +361,12 @@ async def get_rank(user_id: int, chat_id: int) -> Tuple[int, str]:
     
     res = await asyncio.to_thread(supabase.table("chat_members").select("rank").eq("chat_id", chat_id).eq("user_id", user_id).execute)
     if res.data:
-        rank_level = res.data[0].get("rank", 1)
+        rank_level = res.data[0].get("rank", 0)
         name = await get_group_rank_name(chat_id, rank_level, "nom")
         return rank_level, name
     
-    name = await get_group_rank_name(chat_id, 1, "nom")
-    return 1, name
+    name = await get_group_rank_name(chat_id, 0, "nom")
+    return 0, name
 
 async def set_rank(user_id: int, chat_id: int, rank_level: int) -> bool:
     if rank_level not in RANKS or rank_level < 1:
