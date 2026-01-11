@@ -5,7 +5,10 @@ from aiogram.filters import BaseFilter
 from typing import Union
 from bot.config_reader import config
 
-from bot.utils.db_manager import get_rank, RANKS, get_user_rank_context, get_disabled_modules
+from bot.utils.db_manager import (
+    get_rank, RANKS, get_user_rank_context, 
+    get_disabled_modules, get_permission_settings
+)
 
 class AdminFilter(BaseFilter):
     """
@@ -56,58 +59,43 @@ class ModuleEnabledFilter(BaseFilter):
 
 class RankFilter(BaseFilter):
     """
-    Фильтр для проверки минимального ранга пользователя в боте.
+    Фильтр для проверки ранга пользователя в БД.
+    Поддерживает динамическую проверку прав из БД.
     """
-    def __init__(self, min_rank: int):
+    def __init__(self, min_rank: int = None, action_id: str = None):
         self.min_rank = min_rank
+        self.action_id = action_id
 
     async def __call__(self, event: Union[types.Message, types.CallbackQuery]) -> bool:
         if isinstance(event, types.Message):
             user_id = event.from_user.id
             chat = event.chat
-            message = event
         elif isinstance(event, types.CallbackQuery):
             user_id = event.from_user.id
             chat = event.message.chat
-            message = event.message
         else:
             return False
 
-        # Проверка ранга через централизованную функцию
-        rank_level, _, _ = await get_user_rank_context(user_id, chat)
+        if not chat.type in ["group", "supergroup"]:
+            return False
+
+        # Получаем ранг пользователя
+        user_rank, _, _ = await get_user_rank_context(user_id, chat)
         
-        if rank_level >= self.min_rank:
+        # Определяем требуемый ранг
+        required_rank = self.min_rank
+        
+        # Если задан action_id, проверяем настройки группы в БД
+        if self.action_id:
+            settings = await get_permission_settings(chat.id)
+            if self.action_id in settings:
+                required_rank = settings[self.action_id]
+        
+        # Если ранг все еще не определен (ни min_rank, ни в БД), пропускаем
+        if required_rank is None:
             return True
             
-        # Если ранг недостаточен и это сообщение, отправляем уведомление
-        if isinstance(event, types.Message):
-            # Проверяем, не отправляли ли мы уже уведомление для этого сообщения
-            # Используем ID сообщения как ключ, чтобы точно избежать дублей
-            msg_id = f"rank_notified_{event.message_id}"
-            if hasattr(event.bot, msg_id):
-                return False
-                
-            required_name = RANKS.get(self.min_rank, "Неизвестно")
-            try:
-                await event.reply(
-                    f"⚠️ Эта команда доступна с ранга [{self.min_rank}] <b>{required_name}</b>",
-                    parse_mode="HTML"
-                )
-                # Помечаем в боте, что это сообщение уже обработано (на время жизни объекта бота)
-                setattr(event.bot, msg_id, True)
-                
-                # Удаляем метку через 5 секунд, чтобы не забивать память
-                async def clear_notif():
-                    await asyncio.sleep(5)
-                    if hasattr(event.bot, msg_id):
-                        delattr(event.bot, msg_id)
-
-                asyncio.create_task(clear_notif())
-                
-            except Exception as e:
-                logging.error(f"Ошибка при отправке уведомления о ранге: {e}")
-            
-        return False
+        return user_rank >= required_rank
 
 async def is_admin(message: types.Message) -> bool:
     """

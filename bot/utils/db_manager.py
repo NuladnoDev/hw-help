@@ -687,9 +687,30 @@ async def toggle_module(chat_id: int, module_id: str, enable: bool):
         if module_id not in current_disabled:
             current_disabled.append(module_id)
             
-    await asyncio.to_thread(
+    await _retry_supabase_call(
         supabase.table("group_settings").upsert({
             "chat_id": chat_id,
             "disabled_modules": current_disabled
-        }).execute
+        })
+    )
+
+async def get_permission_settings(chat_id: int) -> Dict[str, int]:
+    """Возвращает настройки минимальных рангов для действий в группе."""
+    res = await _retry_supabase_call(
+        supabase.table("group_settings").select("permission_settings").eq("chat_id", chat_id)
+    )
+    if res.data and res.data[0].get("permission_settings"):
+        return res.data[0]["permission_settings"]
+    return {}
+
+async def set_permission_rank(chat_id: int, action_id: str, min_rank: int):
+    """Устанавливает минимальный ранг для конкретного действия."""
+    current_settings = await get_permission_settings(chat_id)
+    current_settings[action_id] = min_rank
+    
+    await _retry_supabase_call(
+        supabase.table("group_settings").upsert({
+            "chat_id": chat_id,
+            "permission_settings": current_settings
+        })
     )

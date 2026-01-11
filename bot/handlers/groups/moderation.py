@@ -89,7 +89,7 @@ async def get_target_id(message: types.Message, command_name: str):
 
     return None, command_args
 
-@router.message(F.text.lower().startswith("бан"), RankFilter(min_rank=3))
+@router.message(F.text.lower().startswith("бан"), RankFilter(action_id="ban"))
 async def handle_ban_command(message: types.Message):
     # Проверка прав самого бота
     bot_member = await message.chat.get_member(message.bot.id)
@@ -133,7 +133,7 @@ async def handle_ban_command(message: types.Message):
 
     await ban_user(message, target_user_id, duration, reason)
 
-@router.message(F.text.lower().startswith("разбан"), RankFilter(min_rank=3))
+@router.message(F.text.lower().startswith("разбан"), RankFilter(action_id="ban"))
 async def handle_unban_command(message: types.Message):
     bot_member = await message.chat.get_member(message.bot.id)
     if not bot_member.status in ["administrator", "creator"]:
@@ -148,7 +148,7 @@ async def handle_unban_command(message: types.Message):
 
     await unban_user(message, target_user_id)
 
-@router.message(F.text.lower().startswith("мут"), RankFilter(min_rank=3))
+@router.message(F.text.lower().startswith("мут"), RankFilter(action_id="mute"))
 async def handle_mute_command(message: types.Message):
     """
     Обработчик команды 'мут'.
@@ -173,7 +173,7 @@ async def handle_mute_command(message: types.Message):
         
     await mute_user(message, target_user_id, command_args)
 
-@router.message(F.text.lower().startswith("кик"), RankFilter(min_rank=4))
+@router.message(F.text.lower().startswith("кик"), RankFilter(action_id="ban"))
 async def handle_kick_command(message: types.Message):
     """
     Обработчик команды 'кик'.
@@ -207,7 +207,7 @@ async def handle_kick_command(message: types.Message):
         logging.error(f"Ошибка при кике: {e}")
         await message.reply("❌ Не удалось кикнуть пользователя. Возможно, у меня недостаточно прав или пользователь является администратором Telegram.")
 
-@router.message(F.text.lower().startswith("размут"), RankFilter(min_rank=3))
+@router.message(F.text.lower().startswith("размут"), RankFilter(action_id="mute"))
 async def handle_unmute_command(message: types.Message):
     """
     Обработчик команды 'размут'.
@@ -226,7 +226,7 @@ async def handle_unmute_command(message: types.Message):
         
     await unmute_user(message, target_user_id)
 
-@router.message(F.text.lower().startswith("варн"), RankFilter(min_rank=2))
+@router.message(F.text.lower().startswith("варн"), RankFilter(action_id="warn"))
 async def handle_warn_command(message: types.Message):
     """
     Обработчик команды 'варн' и 'варны'.
@@ -257,7 +257,7 @@ async def handle_warn_command(message: types.Message):
         
     await warn_user(message, target_user_id, command_args)
 
-@router.message(F.text.lower().startswith("разварн"), RankFilter(min_rank=2))
+@router.message(F.text.lower().startswith("разварн"), RankFilter(action_id="warn"))
 async def handle_unwarn_command(message: types.Message):
     """
     Обработчик команды 'разварн'.
@@ -276,7 +276,7 @@ async def handle_unwarn_command(message: types.Message):
 
     await unwarn_user(message, target_user_id)
 
-@router.message(F.text.lower().startswith("-варн"), RankFilter(min_rank=3))
+@router.message(F.text.lower().startswith("-варн"), RankFilter(action_id="warn"))
 async def handle_remove_warn_index_command(message: types.Message):
     """
     Обработчик команды '-варн @тег номер'.
