@@ -9,13 +9,13 @@ def generate_preview_chart():
     today = datetime.date.today()
     for i in range(30):
         day = today - datetime.timedelta(days=29 - i)
-        count = random.randint(0, 100) if random.random() > 0.2 else 0
+        count = random.randint(0, 1000) if random.random() > 0.1 else 0
         series.append((day, count))
     
-    max_count = max(count for _, count in series) or 1
+    max_count = max(count for _, count in series) or 0
     
     width, height = 800, 400
-    margin_left, margin_right, margin_top, margin_bottom = 40, 38, 40, 60
+    margin_left, margin_right, margin_top, margin_bottom = 40, 75, 40, 60
     plot_width = width - margin_left - margin_right
     plot_height = height - margin_top - margin_bottom
     
@@ -26,21 +26,36 @@ def generate_preview_chart():
     axis_color = (120, 120, 120)
     bar_color = (255, 140, 0) # Оранжевый
     
-    # Сетка
+    def get_font(size=14):
+        fonts = ["arial.ttf", "C:\\Windows\\Fonts\\arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+        for f in fonts:
+            try:
+                return ImageFont.truetype(f, size)
+            except:
+                continue
+        return ImageFont.load_default()
+
+    font = get_font(14)
+    title_font = get_font(18)
+    grid_font = get_font(11)
+    
+    # Сетка и метки значений
     steps = 4
     for i in range(steps + 1):
         y = margin_top + int(plot_height * i / steps)
         draw.line([(margin_left, y), (width - margin_right, y)], fill=grid_color)
-    
-    try:
-        font = ImageFont.truetype("arial.ttf", 20)
-    except:
-        font = ImageFont.load_default()
         
+        # Значение справа (например: 1000, 750, 500, 250, 0)
+        val = int(max_count * (steps - i) / steps) if max_count > 0 else 0
+        val_str = str(val)
+        v_bbox = draw.textbbox((0, 0), val_str, font=grid_font)
+        v_h = v_bbox[3] - v_bbox[1]
+        draw.text((width - margin_right + 5, y - v_h / 2), val_str, fill=axis_color, font=grid_font)
+    
     title = "Статистика активности (Предпросмотр)"
-    bbox = draw.textbbox((0, 0), title, font=font)
+    bbox = draw.textbbox((0, 0), title, font=title_font)
     tw = bbox[2] - bbox[0]
-    draw.text(((width - tw) / 2, 10), title, fill=axis_color, font=font)
+    draw.text(((width - tw) / 2, 10), title, fill=axis_color, font=title_font)
     
     # Вертикальная надпись "Сообщения" справа
     y_label = "Сообщения"
@@ -52,7 +67,7 @@ def generate_preview_chart():
     d = ImageDraw.Draw(txt_img)
     d.text((0, 0), y_label, fill=axis_color, font=font)
     rotated = txt_img.rotate(90, expand=True)
-    img.paste(rotated, (width - margin_right + 5, margin_top + (plot_height - l_w) // 2), rotated)
+    img.paste(rotated, (width - 30, margin_top + (plot_height - l_w) // 2), rotated)
     
     n = len(series)
     bar_spacing = plot_width / max(n, 1)
@@ -60,7 +75,7 @@ def generate_preview_chart():
     
     for idx, (day, count) in enumerate(series):
         x_center = margin_left + int(bar_spacing * idx + bar_spacing / 2)
-        bar_height = int((count / max_count) * plot_height)
+        bar_height = int((count / max_count) * plot_height) if max_count > 0 else 0
         
         x0 = x_center - bar_width // 2
         x1 = x_center + bar_width // 2

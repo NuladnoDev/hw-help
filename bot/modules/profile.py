@@ -40,25 +40,10 @@ async def generate_activity_chart(user_id: int, days: int = 30) -> Optional[Byte
     # if max_count == 0:
     #     return None
     
-    width, height = 800, 400
-    margin_left, margin_right, margin_top, margin_bottom = 40, 38, 40, 60
-    plot_width = width - margin_left - margin_right
-    plot_height = height - margin_top - margin_bottom
-    
-    img = Image.new("RGB", (width, height), "white")
-    draw = ImageDraw.Draw(img)
-    grid_color = (235, 235, 235)
-    axis_color = (120, 120, 120)
-    bar_color = (255, 140, 0)
-    
-    steps = 4
-    for i in range(steps + 1):
-        y = margin_top + int(plot_height * i / steps)
-        draw.line([(margin_left, y), (width - margin_right, y)], fill=grid_color)
-    
     def get_font(size=14):
         # Пути к шрифтам на Linux (хост) и Windows (локально)
         fonts = [
+            "bot/assets/fonts/arial.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             "C:\\Windows\\Fonts\\arial.ttf",
@@ -71,9 +56,34 @@ async def generate_activity_chart(user_id: int, days: int = 30) -> Optional[Byte
                 continue
         return ImageFont.load_default()
 
+    width, height = 800, 400
+    margin_left, margin_right, margin_top, margin_bottom = 40, 75, 40, 60
+    plot_width = width - margin_left - margin_right
+    plot_height = height - margin_top - margin_bottom
+    
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    grid_color = (235, 235, 235)
+    axis_color = (120, 120, 120)
+    bar_color = (255, 140, 0)
+    
     font = get_font(14)
     title_font = get_font(18)
     label_font = get_font(14)
+    grid_font = get_font(11)
+    
+    # Сетка и метки значений
+    steps = 4
+    for i in range(steps + 1):
+        y = margin_top + int(plot_height * i / steps)
+        draw.line([(margin_left, y), (width - margin_right, y)], fill=grid_color)
+        
+        # Значение справа (например: 1000, 750, 500, 250, 0)
+        val = int(max_count * (steps - i) / steps) if max_count > 0 else 0
+        val_str = str(val)
+        v_bbox = draw.textbbox((0, 0), val_str, font=grid_font)
+        v_h = v_bbox[3] - v_bbox[1]
+        draw.text((width - margin_right + 5, y - v_h / 2), val_str, fill=axis_color, font=grid_font)
     
     title = "Статистика активности"
     # Исправление для новых версий Pillow (textsize удален)
@@ -88,12 +98,12 @@ async def generate_activity_chart(user_id: int, days: int = 30) -> Optional[Byte
     l_w = l_bbox[2] - l_bbox[0]
     l_h = l_bbox[3] - l_bbox[1]
     
-    # Рисуем вертикально справа
+    # Рисуем вертикально справа (после чисел)
     txt_img = Image.new("RGBA", (l_w, l_h + 5), (255, 255, 255, 0))
     d = ImageDraw.Draw(txt_img)
     d.text((0, 0), y_label, fill=axis_color, font=label_font)
     rotated = txt_img.rotate(90, expand=True)
-    img.paste(rotated, (width - margin_right + 5, margin_top + (plot_height - l_w) // 2), rotated)
+    img.paste(rotated, (width - 30, margin_top + (plot_height - l_w) // 2), rotated)
     
     n = len(series)
     if n == 0:
@@ -164,7 +174,7 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     profile_text = f"👤 Это пользователь {user_mention}\n\n"
     profile_text += (
         f"🎖 <b>Ранг:</b> {rank_name}\n"
-        f"💰 <b>Койнов на счету:</b> soon\n"
+        f"💰 <b>Койнов на счету:</b> soon\n\n"
     )
 
     if db_data.get("city"):
