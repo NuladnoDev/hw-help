@@ -57,7 +57,7 @@ SOCIAL_ACTIONS = {
         "declension": "укусил(а) за ушко"
     },
     "укусить": {
-        "text": "{user1} укусил(а) {user2} за бочок 🦷",
+        "text": "{user1} укусил(а) {user2} 🦷",
         "emoji": "🦷",
         "declension": "укусил(а)"
     },
@@ -67,8 +67,8 @@ SOCIAL_ACTIONS = {
         "declension": "погладил(а) по животику"
     },
     "погладить": {
-        "text": "{user1} нежно погладил(а) {user2} по голове 😊",
-        "emoji": "😊",
+        "text": "{user1} погладил(а) {user2} ✨",
+        "emoji": "✨",
         "declension": "погладил(а)"
     },
     "лизнуть": {
@@ -102,7 +102,7 @@ SOCIAL_ACTIONS = {
         "declension": "напоил(а) вином"
     },
     "напоить": {
-        "text": "{user1} напоил(а) {user2} до беспамятства 🍻",
+        "text": "{user1} напоил(а) {user2} 🍻",
         "emoji": "🍻",
         "declension": "напоил(а)"
     },
@@ -127,7 +127,7 @@ SOCIAL_ACTIONS = {
         "declension": "покормил(а) печеньками"
     },
     "покормить": {
-        "text": "{user1} покормил(а) с ложечки {user2} 🍲",
+        "text": "{user1} покормил(а) {user2} 🍲",
         "emoji": "🍲",
         "declension": "покормил(а)"
     },
@@ -270,6 +270,26 @@ SOCIAL_ACTIONS = {
         "text": "{user1} отдал(а) свой последний кусочек {user2} 🍕",
         "emoji": "🍕",
         "declension": "поделился(ась) едой"
+    },
+    "подарить мишку": {
+        "text": "{user1} подарил(а) плюшевого мишку {user2} 🧸",
+        "emoji": "🧸",
+        "declension": "подарил(а) мишку"
+    },
+    "облить": {
+        "text": "{user1} облил(а) {user2} 💦",
+        "emoji": "💦",
+        "declension": "облил(а)"
+    },
+    "поделиться": {
+        "text": "{user1} поделился(ась) с {user2} 🤝",
+        "emoji": "🤝",
+        "declension": "поделился(ась)"
+    },
+    "подарить": {
+        "text": "{user1} сделал(а) подарок {user2} 🎁",
+        "emoji": "🎁",
+        "declension": "подарил(а)"
     }
 }
 
@@ -282,7 +302,7 @@ def get_relationship_level(total):
     if total < 200: return "Родственные души 💎"
     return "Неразлучная связь ♾"
 
-@router.message(lambda message: any(message.text.lower().startswith(action) for action in SOCIAL_ACTIONS))
+@router.message(lambda message: message.text and any(message.text.lower().strip().startswith(action) for action in SOCIAL_ACTIONS))
 async def handle_social_action(message: types.Message):
     text = message.text.lower().strip()
     action_key = None
@@ -302,7 +322,7 @@ async def handle_social_action(message: types.Message):
     # Но для этого нам нужно знать, где заканчивается команда и начинается тег
     # В aiogram message.text может быть "ударить @user тапком" или "ударить тапком @user"
     
-    target_user_id, _ = await get_target_id(message, action_key)
+    target_user_id, command_args = await get_target_id(message, action_key)
     
     if not target_user_id:
         await message.reply(f"❌ Укажите, кого вы хотите {action_key} (тег или ответ на сообщение).")
@@ -319,7 +339,14 @@ async def handle_social_action(message: types.Message):
     rel_data = await get_relationship(message.from_user.id, target_user_id)
     
     action_info = SOCIAL_ACTIONS[action_key]
-    result_text = action_info["text"].format(user1=user1_mention, user2=user2_mention)
+    
+    # Если есть дополнительные слова в команде, строим динамический текст
+    if command_args:
+        declension = action_info.get("declension", action_key)
+        emoji = action_info.get("emoji", "🔘")
+        result_text = f"{user1_mention} {declension} {command_args} {user2_mention} {emoji}"
+    else:
+        result_text = action_info["text"].format(user1=user1_mention, user2=user2_mention)
     
     if rel_data:
         # Обновляем БД только если есть официальные отношения

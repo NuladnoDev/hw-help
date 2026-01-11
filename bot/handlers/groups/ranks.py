@@ -2,7 +2,8 @@ from aiogram import Router, types, F
 from bot.modules.profile import get_user_profile
 from bot.utils.db_manager import (
     set_rank, get_rank, get_mention_by_id, RANKS, 
-    get_all_ranked_users, get_user_rank_context, can_user_modify_other
+    get_all_ranked_users, get_user_rank_context, can_user_modify_other,
+    set_group_rank_names, get_group_rank_name
 )
 from bot.handlers.groups.moderation import get_target_id
 from bot.utils.filters import AdminFilter, RankFilter
@@ -69,7 +70,7 @@ async def handle_set_rank_command(message: types.Message):
         
     if await set_rank(target_user_id, message.chat.id, rank_level):
         target_mention = await get_mention_by_id(target_user_id)
-        rank_name = RANKS[rank_level]
+        rank_name = await get_group_rank_name(message.chat.id, rank_level, "nom")
         await message.reply(f"✅ Для пользователя {target_mention} установлен ранг: <b>{rank_name}</b> [{rank_level}]", parse_mode="HTML")
     else:
         await message.reply("❌ Произошла ошибка при сохранении ранга.")
@@ -108,7 +109,7 @@ async def handle_promote_rank_command(message: types.Message):
 
     if await set_rank(target_user_id, message.chat.id, new_level):
         target_mention = await get_mention_by_id(target_user_id)
-        rank_name = RANKS[new_level]
+        rank_name = await get_group_rank_name(message.chat.id, new_level, "nom")
         await message.reply(f"✅ Для пользователя {target_mention} установлен ранг: <b>{rank_name}</b> [{new_level}]", parse_mode="HTML")
     else:
         await message.reply("❌ Произошла ошибка при сохранении ранга.")
@@ -143,7 +144,7 @@ async def handle_demote_rank_command(message: types.Message):
 
     if await set_rank(target_user_id, message.chat.id, new_level):
         target_mention = await get_mention_by_id(target_user_id)
-        rank_name = RANKS[new_level]
+        rank_name = await get_group_rank_name(message.chat.id, new_level, "nom")
         await message.reply(f"✅ Для пользователя {target_mention} установлен ранг: <b>{rank_name}</b> [{new_level}]", parse_mode="HTML")
     else:
         await message.reply("❌ Произошла ошибка при сохранении ранга.")
@@ -163,7 +164,8 @@ async def handle_strip_rank_command(message: types.Message):
 
     if await set_rank(target_user_id, message.chat.id, 1):
         target_mention = await get_mention_by_id(target_user_id)
-        await message.reply(f"🚫 Пользователь {target_mention} был <b>разжалован</b> (ранг 1).", parse_mode="HTML")
+        rank_name = await get_group_rank_name(message.chat.id, 1, "nom")
+        await message.reply(f"🚫 Пользователь {target_mention} был <b>разжалован</b> ({rank_name} [1]).", parse_mode="HTML")
     else:
         await message.reply("❌ Произошла ошибка при сохранении ранга.")
 
@@ -186,6 +188,43 @@ async def handle_who_are_you_command(message: types.Message):
         target_user_id = message.from_user.id
         
     await get_user_profile(message, target_user_id)
+
+@router.message(F.text.lower().startswith("ранг"), RankFilter(min_rank=5))
+async def handle_set_custom_rank_name_command(message: types.Message):
+    """
+    Устанавливает кастомные названия для ранга в группе.
+    Формат: Ранг 1 = Мишки мишек мишкой
+    """
+    pattern = r"^ранг\s+(\d+)\s*=\s*(\w+)\s+(\w+)\s+(\w+)"
+    match = re.match(pattern, message.text.lower().strip())
+    
+    if not match:
+        await message.reply(
+            "❌ Неверный формат команды!\n"
+            "Используйте: <code>Ранг X = Именительный Родительный Творительный</code>\n\n"
+            "Пример: <code>Ранг 1 = Мишки мишек мишкой</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    rank_level = int(match.group(1))
+    nom = match.group(2).capitalize()
+    gen = match.group(3).lower()
+    ins = match.group(4).lower()
+    
+    if rank_level not in RANKS:
+        await message.reply(f"❌ Неверный уровень ранга. Доступно от 1 до {max(RANKS.keys())}.")
+        return
+    
+    await set_group_rank_names(message.chat.id, rank_level, nom, gen, ins)
+    
+    await message.reply(
+        f"✅ Названия для <b>{rank_level} ранга</b> в этой группе обновлены:\n"
+        f"👤 Кто? — <b>{nom}</b>\n"
+        f"👥 Кого? — <b>{gen}</b>\n"
+        f"🛠 Кем? — <b>{ins}</b>",
+        parse_mode="HTML"
+    )
 
 @router.message(F.text.lower().in_({"кто админ?", "кто админ", "список админов", "список администраторов"}))
 async def handle_who_is_admin_command(message: types.Message):
@@ -222,7 +261,7 @@ async def handle_who_is_admin_command(message: types.Message):
         if not users:
             continue
             
-        rank_name = RANKS[level]
+        rank_name = await get_group_rank_name(message.chat.id, level, "nom")
         section = f"[{level}] {rank_name}\n"
         
         # Убираем дубликаты и пустые значения

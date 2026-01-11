@@ -18,6 +18,71 @@ _CACHE_TTL = 300
 
 # --- Users ---
 
+async def get_user_profile_data(user_id: int, chat_id: int) -> Dict[str, Any]:
+    """
+    Оптимизированное получение всех данных профиля за минимальное количество запросов.
+    """
+    # 1. Получаем основные данные пользователя из таблицы users
+    # 2. Получаем ранг из chat_members
+    # 3. Получаем брак
+    # 4. Проверяем наличие наград (счетчик)
+    
+    # Запускаем параллельно основные запросы
+    tasks = [
+        asyncio.to_thread(supabase.table("users").select("*").eq("user_id", user_id).execute),
+        asyncio.to_thread(supabase.table("chat_members").select("rank").eq("chat_id", chat_id).eq("user_id", user_id).execute),
+        asyncio.to_thread(supabase.table("marriages").select("*").or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}").execute),
+        asyncio.to_thread(supabase.table("awards").select("id", count="exact").eq("chat_id", chat_id).eq("user_id", user_id).execute)
+    ]
+    
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    data = {
+        "nickname": None,
+        "description": None,
+        "city": None,
+        "quote": None,
+        "first_appearance": datetime.now(timezone.utc).isoformat(),
+        "last_message": datetime.now(timezone.utc).isoformat(),
+        "rank_level": 1,
+        "marriage": None,
+        "has_awards": False
+    }
+    
+    # Обработка users
+    if not isinstance(results[0], Exception) and results[0].data:
+        u_data = results[0].data[0]
+        data.update({
+            "nickname": u_data.get("nickname"),
+            "description": u_data.get("description"),
+            "city": u_data.get("city"),
+            "quote": u_data.get("quote"),
+            "first_appearance": u_data.get("first_appearance"),
+            "last_message": u_data.get("last_message")
+        })
+        
+    # Обработка rank
+    if not isinstance(results[1], Exception) and results[1].data:
+        data["rank_level"] = results[1].data[0].get("rank", 1)
+        
+    # Специальная проверка для создателя из конфига
+    if config.creator_id and user_id == config.creator_id:
+        data["rank_level"] = 5
+        
+    # Обработка marriage
+    if not isinstance(results[2], Exception) and results[2].data:
+        m = results[2].data[0]
+        data["marriage"] = {
+            "partners": [m["user1_id"], m["user2_id"]],
+            "created_at": m["created_at"]
+        }
+        
+    # Обработка awards
+    if not isinstance(results[3], Exception) and results[3].data:
+        data["has_awards"] = len(results[3].data) > 0
+        
+    return data
+
 async def update_user_cache(user_id: int, username: Optional[str], full_name: Optional[str] = None):
     data = {"user_id": user_id}
     if username:
@@ -186,6 +251,36 @@ async def get_description(user_id: int) -> Optional[str]:
         return res.data[0].get("description")
     return None
 
+# --- City ---
+
+async def set_city(user_id: int, city: str):
+    await asyncio.to_thread(supabase.table("users").upsert({"user_id": user_id, "city": city}).execute)
+
+async def remove_city(user_id: int) -> bool:
+    await asyncio.to_thread(supabase.table("users").update({"city": None}).eq("user_id", user_id).execute)
+    return True
+
+async def get_city(user_id: int) -> Optional[str]:
+    res = await asyncio.to_thread(supabase.table("users").select("city").eq("user_id", user_id).execute)
+    if res.data:
+        return res.data[0].get("city")
+    return None
+
+# --- Quote ---
+
+async def set_quote(user_id: int, quote: str):
+    await asyncio.to_thread(supabase.table("users").upsert({"user_id": user_id, "quote": quote}).execute)
+
+async def remove_quote(user_id: int) -> bool:
+    await asyncio.to_thread(supabase.table("users").update({"quote": None}).eq("user_id", user_id).execute)
+    return True
+
+async def get_quote(user_id: int) -> Optional[str]:
+    res = await asyncio.to_thread(supabase.table("users").select("quote").eq("user_id", user_id).execute)
+    if res.data:
+        return res.data[0].get("quote")
+    return None
+
 # --- Awards ---
 
 async def add_award(chat_id: int, target_user_id: int, admin_user_id: int, text: str) -> int:
@@ -220,16 +315,56 @@ RANKS = {
     5: "Создатель"
 }
 
+# Падежи по умолчанию
+DEFAULT_RANK_CASES = {
+    1: {"nom": "Обычный пользователь", "gen": "Обычного пользователя", "ins": "Обычным пользователем"},
+    2: {"nom": "Младший модератор", "gen": "Младшего модератора", "ins": "Младшим модератором"},
+    3: {"nom": "Модератор", "gen": "Модератора", "ins": "Модератором"},
+    4: {"nom": "Администратор", "gen": "Администратора", "ins": "Администратором"},
+    5: {"nom": "Создатель", "gen": "Создателя", "ins": "Создателем"}
+}
+
+async def get_group_rank_name(chat_id: int, rank_level: int, case: str = "nom") -> str:
+    """Получает название ранга для конкретной группы с учетом падежа."""
+    res = await asyncio.to_thread(
+        supabase.table("group_ranks")
+        .select(f"name_{case}")
+        .eq("chat_id", chat_id)
+        .eq("rank_number", rank_level)
+        .execute
+    )
+    
+    if res.data:
+        return res.data[0].get(f"name_{case}")
+    
+    # Возвращаем дефолтное значение
+    return DEFAULT_RANK_CASES.get(rank_level, {}).get(case, RANKS.get(rank_level, "Неизвестно"))
+
+async def set_group_rank_names(chat_id: int, rank_level: int, nom: str, gen: str, ins: str):
+    """Устанавливает кастомные названия для ранга в группе."""
+    await asyncio.to_thread(
+        supabase.table("group_ranks").upsert({
+            "chat_id": chat_id,
+            "rank_number": rank_level,
+            "name_nom": nom,
+            "name_gen": gen,
+            "name_ins": ins
+        }).execute
+    )
+
 async def get_rank(user_id: int, chat_id: int) -> Tuple[int, str]:
     if config.creator_id and user_id == config.creator_id:
-        return 5, RANKS[5]
+        name = await get_group_rank_name(chat_id, 5, "nom")
+        return 5, name
     
     res = await asyncio.to_thread(supabase.table("chat_members").select("rank").eq("chat_id", chat_id).eq("user_id", user_id).execute)
     if res.data:
         rank_level = res.data[0].get("rank", 1)
-        return rank_level, RANKS.get(rank_level, "Неизвестно")
+        name = await get_group_rank_name(chat_id, rank_level, "nom")
+        return rank_level, name
     
-    return 1, RANKS[1]
+    name = await get_group_rank_name(chat_id, 1, "nom")
+    return 1, name
 
 async def set_rank(user_id: int, chat_id: int, rank_level: int) -> bool:
     if rank_level not in RANKS or rank_level < 1:
@@ -243,12 +378,14 @@ async def set_rank(user_id: int, chat_id: int, rank_level: int) -> bool:
 
 async def get_user_rank_context(user_id: int, chat: types.Chat) -> Tuple[int, str, bool]:
     if config.creator_id and user_id == config.creator_id:
-        return 5, RANKS[5], True
+        name = await get_group_rank_name(chat.id, 5, "nom")
+        return 5, name, True
         
     try:
         member = await chat.get_member(user_id)
         if member.status == "creator":
-            return 5, RANKS[5], True
+            name = await get_group_rank_name(chat.id, 5, "nom")
+            return 5, name, True
     except Exception:
         pass
     

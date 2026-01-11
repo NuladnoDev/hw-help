@@ -343,10 +343,22 @@ async def handle_give_award_command(message: types.Message):
         return
         
     # Проверка иерархии
-    if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = await get_mention_by_id(target_user_id)
-        await message.reply(f"❌ Вы не можете выдавать награды этому пользователю (иерархия).", parse_mode="HTML")
+    admin_rank, _, is_admin_super = await get_user_rank_context(message.from_user.id, message.chat)
+    
+    # Логика: 5 ранг (Создатель/Супер) может давать награды всем, кроме самого себя.
+    # Но если это Глобальный Создатель (из конфига), он может и себе.
+    is_global_creator = config.creator_id and message.from_user.id == config.creator_id
+    
+    if message.from_user.id == target_user_id and not is_global_creator:
+        await message.reply("❌ Вы не можете выдавать награду самому себе!")
         return
+
+    # Если не 5 ранг и не глобальный создатель, проверяем обычную иерархию
+    if admin_rank < 5 and not is_global_creator:
+        if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
+            target_mention = await get_mention_by_id(target_user_id)
+            await message.reply(f"❌ Вы не можете выдавать награды этому пользователю (иерархия).", parse_mode="HTML")
+            return
 
     await give_award(message, target_user_id, command_args)
 

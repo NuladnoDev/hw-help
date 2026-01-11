@@ -1,11 +1,10 @@
 from aiogram import types
 from bot.utils.db_manager import (
-    get_nickname, get_user_stats, get_description, 
-    get_rank, get_mention_by_id, get_user_rank_context,
-    get_marriage
+    get_mention_by_id, get_user_rank_context,
+    get_user_profile_data, get_group_rank_name
 )
 from bot.keyboards.profile_keyboards import get_profile_kb
-from datetime import datetime
+from datetime import datetime, timezone
 
 def get_relative_time(dt: datetime) -> str:
     """
@@ -29,47 +28,54 @@ def get_relative_time(dt: datetime) -> str:
 async def get_user_profile(message: types.Message, target_user_id: int):
     """
     Формирует и отправляет профиль пользователя в новом формате.
+    Оптимизировано для быстрой работы.
     """
-    # Получаем данные из БД
-    custom_nick = await get_nickname(target_user_id)
-    stats = await get_user_stats(target_user_id)
+    # 1. Сначала получаем все данные из БД одним пакетом
+    db_data = await get_user_profile_data(target_user_id, message.chat.id)
     
-    # Пытаемся получить инфо о пользователе через Telegram
+    # 2. Пытаемся получить информацию из Telegram (только если нужно)
     try:
+        # Используем кэш из db_data, если там есть ник
+        display_name = db_data.get("nickname")
+        
+        # Если в чате, пробуем получить актуальное имя
         member = await message.chat.get_member(target_user_id)
         user = member.user
         
-        # Определяем имя для отображения: ник -> @тег -> имя
-        display_name = custom_nick
         if not display_name:
             display_name = f"@{user.username}" if user.username else user.full_name
             
         user_mention = user.mention_html(display_name)
         
-        # Попутно обновляем кэш свежими данными
-        from bot.utils.db_manager import update_user_cache
-        await update_user_cache(user.id, user.username, user.full_name)
+        # Проверяем на создателя чата для ранга
+        if member.status == "creator" and db_data["rank_level"] < 5:
+            db_data["rank_level"] = 5
+            
     except Exception:
-        # Если не удалось получить инфо из Telegram, используем наш кэш/никнейм
+        # Если не удалось получить инфо из Telegram, используем get_mention_by_id (он тоже лезет в БД, но это крайний случай)
         user_mention = await get_mention_by_id(target_user_id)
 
-    rank_level, rank_name, is_super = await get_user_rank_context(target_user_id, message.chat)
-    description = await get_description(target_user_id)
-    marriage = await get_marriage(target_user_id)
+    # 3. Получаем название ранга с учетом падежа (может быть в кэше БД)
+    rank_name = await get_group_rank_name(message.chat.id, db_data["rank_level"], "nom")
     
     # Форматирование дат
-    first_app_str = datetime.fromisoformat(stats["first_appearance"]).strftime("%d.%m.%Y")
+    first_app_dt = datetime.fromisoformat(db_data["first_appearance"])
+    first_app_str = first_app_dt.strftime("%d.%m.%Y")
     
     profile_text = f"👤 Это пользователь {user_mention}\n"
     
-    if description:
-        profile_text += f"{description}\n"
+    if db_data.get("description"):
+        profile_text += f"{db_data['description']}\n"
         
     profile_text += (
         f"\n"
         f"🎖 <b>Ранг:</b> {rank_name}\n"
     )
 
+    if db_data.get("city"):
+        profile_text += f"🏙 <b>Город:</b> {db_data['city']}\n"
+
+    marriage = db_data.get("marriage")
     if marriage:
         partner_id = [p for p in marriage["partners"] if p != target_user_id][0]
         partner_mention = await get_mention_by_id(partner_id)
@@ -83,5 +89,5 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     await message.answer(
         profile_text, 
         parse_mode="HTML",
-        reply_markup=get_profile_kb(target_user_id)
+        reply_markup=get_profile_kb(target_user_id, has_quote=bool(db_data.get("quote")))
     )

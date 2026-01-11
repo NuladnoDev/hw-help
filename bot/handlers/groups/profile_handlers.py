@@ -2,7 +2,11 @@ from aiogram import Router, types, F
 from bot.modules.profile import get_user_profile
 from bot.handlers.groups.moderation import get_target_id
 from bot.keyboards.profile_keyboards import ProfileAction
-from bot.utils.db_manager import set_description, remove_description, get_description, get_awards, get_mention_by_id
+from bot.utils.db_manager import (
+    set_description, remove_description, get_description, 
+    get_awards, get_mention_by_id, set_city, remove_city, get_city,
+    set_quote, remove_quote, get_quote
+)
 import re
 import logging
 
@@ -28,6 +32,62 @@ async def handle_set_description(message: types.Message):
     
     await set_description(message.from_user.id, new_desc)
     await message.reply("✅ Описание профиля обновлено!")
+
+@router.message(F.text.lower().startswith("+город"))
+async def handle_set_city(message: types.Message):
+    """
+    Устанавливает город в профиле.
+    """
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply("❌ Вы не указали город. Используйте: <code>+Город (название)</code>", parse_mode="HTML")
+        return
+    
+    city_name = parts[1].strip().capitalize()
+    if len(city_name) > 40:
+        await message.reply("❌ Название города слишком длинное (максимум 40 символов).")
+        return
+    
+    await set_city(message.from_user.id, city_name)
+    await message.reply(f"✅ В профиль добавлен город: <b>{city_name}</b>", parse_mode="HTML")
+
+@router.message(F.text.lower().startswith("+цитата"))
+async def handle_set_quote(message: types.Message):
+    """
+    Устанавливает цитату в профиле.
+    """
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply("❌ Вы не указали цитату. Используйте: <code>+Цитата (ваш текст)</code>", parse_mode="HTML")
+        return
+    
+    new_quote = parts[1].strip()
+    if len(new_quote) > 300:
+        await message.reply("❌ Цитата слишком длинная (максимум 300 символов).")
+        return
+    
+    await set_quote(message.from_user.id, new_quote)
+    await message.reply("✅ Цитата профиля обновлена!")
+
+@router.message(F.text.lower().startswith("-город"))
+async def handle_remove_city(message: types.Message):
+    """
+    Удаляет город из профиля.
+    """
+    if await remove_city(message.from_user.id):
+        await message.reply("✅ Город удален из вашего профиля.")
+    else:
+        await message.reply("❌ В вашем профиле не был указан город.")
+
+@router.message(F.text.lower().startswith("-цитата"))
+async def handle_remove_quote(message: types.Message):
+    """
+    Удаляет цитату из профиля.
+    """
+    if await remove_quote(message.from_user.id):
+        await message.reply("✅ Цитата профиля удалена.")
+    else:
+        await message.reply("❌ У вас не было установлено цитаты.")
 
 @router.message(F.text.lower().startswith("-описание"))
 async def handle_remove_description(message: types.Message):
@@ -71,6 +131,14 @@ async def handle_profile_callbacks(query: types.CallbackQuery, callback_data: Pr
         response += f"\nЧтобы убрать награду, используйте:\n<code>-награда (тег) (номер)</code>"
         
         await query.message.answer(response, parse_mode="HTML")
+        await query.answer()
+
+    elif callback_data.action == "quote":
+        quote = await get_quote(target_user_id)
+        if quote:
+            await query.message.answer(f"💬 Цитата пользователя {target_mention}:\n\n<i>«{quote}»</i>", parse_mode="HTML")
+        else:
+            await query.message.answer(f"💬 У пользователя {target_mention} нет цитаты.", parse_mode="HTML")
         await query.answer()
 
 @router.message(F.text.lower().in_({"ты кто", "кто такой", "профиль", "кто я"}))
