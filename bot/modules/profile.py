@@ -14,7 +14,12 @@ def get_relative_time(dt: datetime) -> str:
     """
     Возвращает строку вида '2 дня назад' или '5 минут назад'.
     """
-    diff = datetime.now() - dt
+    # Гарантируем, что оба времени имеют информацию о часовом поясе
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    
+    now = datetime.now(timezone.utc)
+    diff = now - dt
     seconds = int(diff.total_seconds())
     
     if seconds < 60:
