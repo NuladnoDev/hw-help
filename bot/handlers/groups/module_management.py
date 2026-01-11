@@ -11,7 +11,7 @@ AVAILABLE_MODULES = {
     2: {"name": "Русская рулетка", "id": "roulette"}
 }
 
-@router.message(F.text.lower() == ".кд лист", RankFilter(min_rank=3))
+@router.message(F.text.lower().contains(".кд лист"), RankFilter(min_rank=3))
 async def handle_module_list(message: types.Message):
     """
     Выводит список модулей и их статус.
@@ -33,7 +33,7 @@ async def handle_module_list(message: types.Message):
     
     await message.reply(text, parse_mode="HTML")
 
-@router.message(F.text.lower().startswith((".кд +", ".кд -")), RankFilter(min_rank=3))
+@router.message(F.text.lower().contains(".кд +") | F.text.lower().contains(".кд -"), RankFilter(min_rank=3))
 async def handle_module_toggle(message: types.Message):
     """
     Включает или выключает модуль по его номеру.

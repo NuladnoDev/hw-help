@@ -16,7 +16,7 @@ MODERATION_ACTIONS = {
     6: {"name": "Выдача наград", "id": "award", "default": 3},
 }
 
-@router.message(F.text.lower() == ".права лист", RankFilter(min_rank=5))
+@router.message(F.text.lower().contains(".права лист"), RankFilter(min_rank=5))
 async def handle_permissions_list(message: types.Message):
     """
     Выводит список действий и минимальный ранг для них.
@@ -38,7 +38,7 @@ async def handle_permissions_list(message: types.Message):
     
     await message.reply(text, parse_mode="HTML")
 
-@router.message(F.text.lower().startswith(".права"), RankFilter(min_rank=5))
+@router.message(F.text.lower().contains(".права") & F.text.contains("="), RankFilter(min_rank=5))
 async def handle_permission_change(message: types.Message):
     """
     Изменяет минимальный ранг для действия.
