@@ -592,3 +592,30 @@ async def get_user_activity_series(user_id: int, days: int = 30) -> List[Tuple[d
         current += timedelta(days=1)
     
     return series
+
+async def get_user_activity_summary(user_id: int) -> Dict[str, int]:
+    """Возвращает статистику сообщений за день, неделю, месяц и все время."""
+    # Получаем серию за 30 дней для расчета д|н|м
+    series_30 = await get_user_activity_series(user_id, days=30)
+    
+    summary = {"day": 0, "week": 0, "month": 0, "total": 0}
+    
+    if series_30:
+        # День (сегодня)
+        summary["day"] = series_30[-1][1]
+        # Неделя (последние 7 дней)
+        summary["week"] = sum(count for _, count in series_30[-7:])
+        # Месяц (все 30 дней)
+        summary["month"] = sum(count for _, count in series_30)
+        
+    # Для "все время" суммируем все записи из таблицы
+    res = await asyncio.to_thread(
+        supabase.table("activity_stats")
+        .select("count")
+        .eq("user_id", user_id)
+        .execute
+    )
+    if res.data:
+        summary["total"] = sum(item.get("count", 0) or 0 for item in res.data)
+            
+    return summary

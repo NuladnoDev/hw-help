@@ -2,7 +2,7 @@ from aiogram import types
 from bot.utils.db_manager import (
     get_mention_by_id, get_user_rank_context,
     get_user_profile_data, get_group_rank_name,
-    get_user_activity_series
+    get_user_activity_series, get_user_activity_summary
 )
 from bot.keyboards.profile_keyboards import get_profile_kb
 from datetime import datetime, timezone
@@ -167,9 +167,15 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     # 3. Получаем название ранга с учетом падежа (может быть в кэше БД)
     rank_name = await get_group_rank_name(message.chat.id, db_data["rank_level"], "nom")
     
+    # 4. Получаем статистику активности текстом
+    stats = await get_user_activity_summary(target_user_id)
+    
     # Форматирование дат
     first_app_dt = datetime.fromisoformat(db_data["first_appearance"])
     first_app_str = first_app_dt.strftime("%d.%m.%Y")
+    
+    last_msg_dt = datetime.fromisoformat(db_data["last_message"])
+    last_active_str = get_relative_time(last_msg_dt)
     
     profile_text = f"👤 Это пользователь {user_mention}\n\n"
     profile_text += (
@@ -188,7 +194,8 @@ async def get_user_profile(message: types.Message, target_user_id: int):
 
     profile_text += (
         f"📅 <b>Впервые замечен:</b> {first_app_str}\n"
-        f"📊 <b>Статус:</b> {'Бот' if 'user' in locals() and getattr(user, 'is_bot', False) else 'Пользователь'}"
+        f"⏳ <b>Последний актив:</b> {last_active_str}\n\n"
+        f"📈 <b>Актив (д|н|м|весь):</b> {stats['day']} | {stats['week']} | {stats['month']} | {stats['total']}"
     )
     
     chart = await generate_activity_chart(target_user_id)
