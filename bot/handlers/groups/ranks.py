@@ -180,26 +180,6 @@ async def handle_strip_rank_command(message: types.Message):
     else:
         await message.reply("❌ Произошла ошибка при разжаловании пользователя.")
 
-@router.message(F.text.lower().regexp(r'^(кто ты|ты кто|профиль)'))
-async def handle_who_are_you_command(message: types.Message):
-    """Выводит профиль указанного пользователя или отправителя."""
-    text = message.text.lower()
-    command_name = ""
-    if text.startswith("кто ты"):
-        command_name = "кто ты"
-    elif text.startswith("ты кто"):
-        command_name = "ты кто"
-    elif text.startswith("профиль"):
-        command_name = "профиль"
-        
-    target_user_id, _ = await get_target_id(message, command_name)
-    
-    # Если цель не указана и нет реплая, проверяем отправителя
-    if not target_user_id:
-        target_user_id = message.from_user.id
-        
-    await get_user_profile(message, target_user_id)
-
 @router.message(F.text.lower().startswith("ранг"), RankFilter(min_rank=5))
 async def handle_set_custom_rank_name_command(message: types.Message):
     """
@@ -237,7 +217,7 @@ async def handle_set_custom_rank_name_command(message: types.Message):
         parse_mode="HTML"
     )
 
-@router.message(F.text.lower().in_({"кто админ?", "кто админ", "список админов", "список администраторов", "кто администрация"}))
+@router.message(F.text.lower().in_({"кто админ?", "кто админ", "список админов", "список администраторов"}))
 async def handle_who_is_admin_command(message: types.Message):
     """Показывает список всех рангов и пользователей на них."""
     ranked_users = await get_all_ranked_users(message.chat.id)

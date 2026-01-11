@@ -62,14 +62,11 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     first_app_dt = datetime.fromisoformat(db_data["first_appearance"])
     first_app_str = first_app_dt.strftime("%d.%m.%Y")
     
-    profile_text = f"👤 Это пользователь {user_mention}\n"
+    profile_text = f"👤 Это пользователь {user_mention}\n\n"
     
-    if db_data.get("description"):
-        profile_text += f"{db_data['description']}\n"
-        
     profile_text += (
-        f"\n"
         f"🎖 <b>Ранг:</b> {rank_name}\n"
+        f"💰 <b>Койнов на счету:</b> soon\n"
     )
 
     if db_data.get("city"):

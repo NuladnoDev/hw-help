@@ -27,7 +27,15 @@ async def get_target_id(message: types.Message, command_name: str):
     """
     target_user_id = None
     text = message.text or message.caption or ""
-    command_args = text[len(command_name):].strip()
+    
+    # Извлекаем аргументы: все, что после первого слова (команды)
+    # Если command_name содержит пробелы (например "кто ты"), отрезаем его целиком
+    if command_name and text.lower().startswith(command_name.lower()):
+        command_args = text[len(command_name):].strip()
+    else:
+        # Если команда не совпадает, просто берем все после первого слова
+        parts = text.split(maxsplit=1)
+        command_args = parts[1].strip() if len(parts) > 1 else ""
 
     # 1. Ответ на сообщение
     if message.reply_to_message:
@@ -64,6 +72,20 @@ async def get_target_id(message: types.Message, command_name: str):
     if id_match:
         found_id = int(id_match.group(1))
         return found_id, command_args.replace(id_match.group(1), "").strip()
+    
+    # 4. Поиск юзернейма текстом (если не распознано как сущность)
+    username_match = re.search(r'@(\w{4,32})', command_args)
+    if username_match:
+        username = username_match.group(0)
+        cached_id = await get_user_id_by_username(username)
+        if cached_id:
+            return cached_id, command_args.replace(username, "").strip()
+        try:
+            chat = await message.bot.get_chat(username)
+            await update_user_cache(chat.id, chat.username, chat.full_name or chat.title)
+            return chat.id, command_args.replace(username, "").strip()
+        except Exception:
+            pass
 
     return None, command_args
 

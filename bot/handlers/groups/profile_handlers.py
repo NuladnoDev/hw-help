@@ -141,31 +141,32 @@ async def handle_profile_callbacks(query: types.CallbackQuery, callback_data: Pr
             await query.message.answer(f"💬 У пользователя {target_mention} нет цитаты.", parse_mode="HTML")
         await query.answer()
 
-@router.message(F.text.lower().in_({"ты кто", "кто такой", "профиль", "кто я"}))
+@router.message(F.text.lower().regexp(r'^(кто ты|ты кто|профиль|кто такой|кто я)'))
 async def handle_profile_command(message: types.Message):
     """
-    Обработчик команд профиля.
+    Обработчик команд профиля (кто ты, ты кто, профиль, кто такой, кто я).
     """
+    text = message.text.lower()
+    
     # Если команда 'кто я', показываем профиль отправителя
-    if message.text.lower() == "кто я":
+    if text == "кто я":
         await get_user_profile(message, message.from_user.id)
         return
 
-    target_user_id = None
+    # Определяем имя команды для корректного парсинга аргументов в get_target_id
+    command_name = ""
+    if text.startswith("кто ты"): command_name = "кто ты"
+    elif text.startswith("ты кто"): command_name = "ты кто"
+    elif text.startswith("кто такой"): command_name = "кто такой"
+    elif text.startswith("профиль"): command_name = "профиль"
     
-    # Если это ответ на сообщение
-    if message.reply_to_message:
+    target_user_id, _ = await get_target_id(message, command_name)
+    
+    # Если это ответ на сообщение и target_user_id еще не найден
+    if not target_user_id and message.reply_to_message:
         target_user_id = message.reply_to_message.from_user.id
-    else:
-        # Пытаемся найти упоминание в тексте
-        parts = message.text.split()
-        if len(parts) > 1:
-            cmd = parts[0].lower()
-            if cmd == "ты" and len(parts) > 2:
-                cmd = "ты кто"
-            
-            target_user_id, _ = await get_target_id(message, cmd)
     
+    # Если цель все еще не найдена, показываем профиль отправителя
     if not target_user_id:
         target_user_id = message.from_user.id
         
@@ -192,21 +193,3 @@ async def handle_my_awards_command(message: types.Message):
     response += f"\nЧтобы убрать награду, используйте:\n<code>-награда (номер)</code>"
     
     await message.answer(response, parse_mode="HTML")
-
-@router.message(F.text.lower().startswith(("ты кто ", "кто такой ", "профиль ")))
-async def handle_profile_with_args(message: types.Message):
-    """
-    Обработка команд профиля с аргументами (например, 'профиль @user')
-    """
-    text = message.text.lower()
-    cmd = ""
-    if text.startswith("ты кто"): cmd = "ты кто"
-    elif text.startswith("кто такой"): cmd = "кто такой"
-    elif text.startswith("профиль"): cmd = "профиль"
-    
-    target_user_id, _ = await get_target_id(message, cmd)
-    
-    if not target_user_id:
-        target_user_id = message.from_user.id
-        
-    await get_user_profile(message, target_user_id)
