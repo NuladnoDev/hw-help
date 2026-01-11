@@ -31,8 +31,8 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     Формирует и отправляет профиль пользователя в новом формате.
     """
     # Получаем данные из БД
-    custom_nick = get_nickname(target_user_id)
-    stats = get_user_stats(target_user_id)
+    custom_nick = await get_nickname(target_user_id)
+    stats = await get_user_stats(target_user_id)
     
     # Пытаемся получить инфо о пользователе через Telegram
     try:
@@ -48,14 +48,14 @@ async def get_user_profile(message: types.Message, target_user_id: int):
         
         # Попутно обновляем кэш свежими данными
         from bot.utils.db_manager import update_user_cache
-        update_user_cache(user.id, user.username, user.full_name)
+        await update_user_cache(user.id, user.username, user.full_name)
     except Exception:
         # Если не удалось получить инфо из Telegram, используем наш кэш/никнейм
-        user_mention = get_mention_by_id(target_user_id)
+        user_mention = await get_mention_by_id(target_user_id)
 
     rank_level, rank_name, is_super = await get_user_rank_context(target_user_id, message.chat)
-    description = get_description(target_user_id)
-    marriage = get_marriage(target_user_id)
+    description = await get_description(target_user_id)
+    marriage = await get_marriage(target_user_id)
     
     # Форматирование дат
     first_app_str = datetime.fromisoformat(stats["first_appearance"]).strftime("%d.%m.%Y")
@@ -72,7 +72,7 @@ async def get_user_profile(message: types.Message, target_user_id: int):
 
     if marriage:
         partner_id = [p for p in marriage["partners"] if p != target_user_id][0]
-        partner_mention = get_mention_by_id(partner_id)
+        partner_mention = await get_mention_by_id(partner_id)
         profile_text += f"💍 <b>В браке с:</b> {partner_mention}\n"
 
     profile_text += (

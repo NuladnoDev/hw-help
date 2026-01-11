@@ -51,10 +51,10 @@ async def mute_user(message: types.Message, target_user_id: int, command_args: s
         )
         
         # Сохраняем в БД для защиты от перезахода
-        add_mute(message.chat.id, target_user_id, until_date)
+        await add_mute(message.chat.id, target_user_id, until_date)
         
         # Уведомление с учетом никнеймов
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         expiry_str = until_date.strftime("%d.%m.%Y %H:%M") if until_date else "бессрочно"
         
         await message.answer(
@@ -87,9 +87,9 @@ async def unmute_user(message: types.Message, target_user_id: int):
             permissions=permissions
         )
         
-        remove_mute(message.chat.id, target_user_id)
+        await remove_mute(message.chat.id, target_user_id)
         
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.answer(
             f"🔊 <b>Пользователь размучен:</b> {target_mention}",
             parse_mode="HTML"

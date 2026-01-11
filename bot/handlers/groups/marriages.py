@@ -53,16 +53,16 @@ async def marriage_invite(message: types.Message):
         return
 
     # Проверка, не в браке ли уже кто-то
-    if get_marriage(message.from_user.id):
+    if await get_marriage(message.from_user.id):
         await message.reply("❌ Вы уже состоите в браке! Сначала разведитесь.")
         return
     
-    if get_marriage(target_user_id):
+    if await get_marriage(target_user_id):
         await message.reply("❌ Этот пользователь уже состоит в браке.")
         return
 
-    proposer_mention = get_mention_by_id(message.from_user.id)
-    target_mention = get_mention_by_id(target_user_id)
+    proposer_mention = await get_mention_by_id(message.from_user.id)
+    target_mention = await get_mention_by_id(target_user_id)
     
     await message.answer(
         f"💖 {proposer_mention} делает предложение руки и сердца {target_mention}!\n\n"
@@ -81,15 +81,15 @@ async def accept_marriage(callback: types.CallbackQuery, callback_data: Marriage
     target_id = callback_data.target_id
     
     # Еще раз проверяем, не успел ли кто-то вступить в брак
-    if get_marriage(proposer_id) or get_marriage(target_id):
+    if await get_marriage(proposer_id) or await get_marriage(target_id):
         await callback.answer("❌ Кто-то из вас уже успел вступить в брак!", show_alert=True)
         await callback.message.delete()
         return
 
-    create_marriage(proposer_id, target_id)
+    await create_marriage(proposer_id, target_id)
     
-    proposer_mention = get_mention_by_id(proposer_id)
-    target_mention = get_mention_by_id(target_id)
+    proposer_mention = await get_mention_by_id(proposer_id)
+    target_mention = await get_mention_by_id(target_id)
     
     await callback.message.edit_text(
         f"🎉 Поздравляем! {proposer_mention} и {target_mention} теперь официально в браке! 🥳💍\n\n"
@@ -103,7 +103,7 @@ async def decline_marriage(callback: types.CallbackQuery, callback_data: Marriag
         await callback.answer("❌ Это предложение не вам!", show_alert=True)
         return
 
-    target_mention = get_mention_by_id(callback_data.target_id)
+    target_mention = await get_mention_by_id(callback_data.target_id)
     await callback.message.edit_text(
         f"💔 {target_mention} отклонил(а) предложение руки и сердца... Сердце разбито.",
         parse_mode="HTML"
@@ -111,14 +111,14 @@ async def decline_marriage(callback: types.CallbackQuery, callback_data: Marriag
 
 @router.message(F.text.lower() == "мой брак")
 async def my_marriage(message: types.Message):
-    marriage = get_marriage(message.from_user.id)
+    marriage = await get_marriage(message.from_user.id)
     
     if not marriage:
         await message.reply("👀 Вы пока не состоите в браке. Используйте 'Брак [пользователь]', чтобы сделать предложение.")
         return
         
     partner_id = [p for p in marriage["partners"] if p != message.from_user.id][0]
-    partner_mention = get_mention_by_id(partner_id)
+    partner_mention = await get_mention_by_id(partner_id)
     
     created_at = datetime.fromisoformat(marriage["created_at"])
     duration = datetime.now() - created_at
@@ -137,16 +137,16 @@ async def my_marriage(message: types.Message):
 
 @router.message(F.text.lower() == "развод")
 async def divorce(message: types.Message):
-    marriage = get_marriage(message.from_user.id)
+    marriage = await get_marriage(message.from_user.id)
     
     if not marriage:
         await message.reply("🤔 Вы и так не в браке.")
         return
         
     partner_id = [p for p in marriage["partners"] if p != message.from_user.id][0]
-    partner_mention = get_mention_by_id(partner_id)
+    partner_mention = await get_mention_by_id(partner_id)
     
-    remove_marriage(message.from_user.id)
+    await remove_marriage(message.from_user.id)
     
     await message.reply(
         f"🥀 Брак между вами и {partner_mention} был расторгнут.\n"

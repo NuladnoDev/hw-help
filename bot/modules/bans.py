@@ -16,7 +16,7 @@ async def ban_user(message: types.Message, user_id: int, duration: timedelta = N
     try:
         await message.chat.ban(user_id=user_id, until_date=until_date)
         
-        target_mention = get_mention_by_id(user_id)
+        target_mention = await get_mention_by_id(user_id)
         ban_message = f"👤 {target_mention} был **забанен**."
         if duration:
             ban_message += f" До: {until_date.strftime('%d.%m.%Y %H:%M')}"
@@ -40,9 +40,9 @@ async def unban_user(message: types.Message, user_id: int):
     """
     try:
         await message.chat.unban(user_id=user_id, only_if_banned=True)
-        remove_ban(message.chat.id, user_id)
+        await remove_ban(message.chat.id, user_id)
         
-        target_mention = get_mention_by_id(user_id)
+        target_mention = await get_mention_by_id(user_id)
         await message.answer(
             text=f"✅ {target_mention} был **разбанен**.",
             parse_mode="HTML"

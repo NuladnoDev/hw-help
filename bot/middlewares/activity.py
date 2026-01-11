@@ -15,7 +15,7 @@ class ActivityMiddleware(BaseMiddleware):
         
         if isinstance(event, Message) and event.from_user:
             # Обновляем кэш и активность только когда пользователь реально взаимодействует с ботом
-            update_user_cache(event.from_user.id, event.from_user.username, event.from_user.full_name)
-            update_user_activity(event.from_user.id)
+            await update_user_cache(event.from_user.id, event.from_user.username, event.from_user.full_name)
+            await update_user_activity(event.from_user.id)
             
         return await handler(event, data)

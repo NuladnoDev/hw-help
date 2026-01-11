@@ -31,7 +31,7 @@ async def get_target_id(message: types.Message, command_name: str):
     # 1. Ответ на сообщение
     if message.reply_to_message:
         target_user = message.reply_to_message.from_user
-        update_user_cache(target_user.id, target_user.username, target_user.full_name)
+        await update_user_cache(target_user.id, target_user.username, target_user.full_name)
         return target_user.id, command_args
 
     # 2. Поиск в сущностях (упоминания)
@@ -39,20 +39,20 @@ async def get_target_id(message: types.Message, command_name: str):
         for entity in message.entities:
             if entity.type == MessageEntityType.TEXT_MENTION and entity.user:
                 target_user = entity.user
-                update_user_cache(target_user.id, target_user.username, target_user.full_name)
+                await update_user_cache(target_user.id, target_user.username, target_user.full_name)
                 return target_user.id, command_args.replace(message.text[entity.offset:entity.offset+entity.length], "").strip()
             
             if entity.type == MessageEntityType.MENTION:
                 mention_text = message.text[entity.offset:entity.offset+entity.length]
                 # Проверяем кэш
-                cached_id = get_user_id_by_username(mention_text)
+                cached_id = await get_user_id_by_username(mention_text)
                 if cached_id:
                     return cached_id, command_args.replace(mention_text, "").strip()
                 
                 # Прямой запрос (для публичных юзеров и ботов)
                 try:
                     chat = await message.bot.get_chat(mention_text)
-                    update_user_cache(chat.id, chat.username, chat.full_name or chat.title)
+                    await update_user_cache(chat.id, chat.username, chat.full_name or chat.title)
                     return chat.id, command_args.replace(mention_text, "").strip()
                 except Exception:
                     pass
@@ -100,7 +100,7 @@ async def handle_ban_command(message: types.Message):
     
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете применить это действие к пользователю {target_mention} (иерархия).", parse_mode="HTML")
         return
 
@@ -143,7 +143,7 @@ async def handle_mute_command(message: types.Message):
 
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете применить это действие к пользователю {target_mention} (иерархия).", parse_mode="HTML")
         return
         
@@ -168,7 +168,7 @@ async def handle_kick_command(message: types.Message):
 
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете применить это действие к пользователю {target_mention} (иерархия).", parse_mode="HTML")
         return
 
@@ -177,7 +177,7 @@ async def handle_kick_command(message: types.Message):
         await message.chat.ban(target_user_id)
         await message.chat.unban(target_user_id)
         
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"👞 Пользователь {target_mention} был <b>кикнут</b> из группы.", parse_mode="HTML")
     except Exception as e:
         logging.error(f"Ошибка при кике: {e}")
@@ -227,7 +227,7 @@ async def handle_warn_command(message: types.Message):
 
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете применить это действие к пользователю {target_mention} (иерархия).", parse_mode="HTML")
         return
         
@@ -246,7 +246,7 @@ async def handle_unwarn_command(message: types.Message):
         
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете изменять предупреждения пользователя {target_mention} (иерархия).", parse_mode="HTML")
         return
 
@@ -285,7 +285,7 @@ async def handle_remove_warn_index_command(message: types.Message):
             
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете изменять предупреждения пользователя {target_mention} (иерархия).", parse_mode="HTML")
         return
 
@@ -318,7 +318,7 @@ async def handle_remove_award_command(message: types.Message):
             
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете удалять награды этого пользователя (иерархия).", parse_mode="HTML")
         return
 
@@ -344,7 +344,7 @@ async def handle_give_award_command(message: types.Message):
         
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете выдавать награды этому пользователю (иерархия).", parse_mode="HTML")
         return
 
@@ -363,7 +363,7 @@ async def handle_clear_warns_command(message: types.Message):
         
     # Проверка иерархии
     if not await can_user_modify_other(message.from_user.id, target_user_id, message.chat):
-        target_mention = get_mention_by_id(target_user_id)
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"❌ Вы не можете очистить варны пользователя {target_mention} (иерархия).", parse_mode="HTML")
         return
 
@@ -406,7 +406,7 @@ async def cb_unban_user(callback: types.CallbackQuery, callback_data: ModAction)
         
         # Удаляем из нашей базы
         from bot.utils.db_manager import remove_ban
-        remove_ban(chat_id, user_id)
+        await remove_ban(chat_id, user_id)
         
         admin_name = callback.from_user.full_name
         await callback.message.edit_text(

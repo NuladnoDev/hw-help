@@ -13,10 +13,10 @@ async def give_award(message: types.Message, target_user_id: int, text: str):
         await message.reply("❌ Вы не указали текст награды!")
         return
         
-    add_award(message.chat.id, target_user_id, message.from_user.id, text)
+    await add_award(message.chat.id, target_user_id, message.from_user.id, text)
     
-    target_mention = get_mention_by_id(target_user_id)
-    admin_mention = get_user_mention_with_nickname(message.from_user)
+    target_mention = await get_mention_by_id(target_user_id)
+    admin_mention = await get_user_mention_with_nickname(message.from_user)
     
     await message.answer(
         f"🏆 {admin_mention} выдал награду {target_mention}\n"
@@ -28,8 +28,8 @@ async def remove_award_index(message: types.Message, target_user_id: int, index:
     """
     Удаляет награду по индексу.
     """
-    target_mention = get_mention_by_id(target_user_id)
-    if remove_award_by_index(message.chat.id, target_user_id, index - 1):
+    target_mention = await get_mention_by_id(target_user_id)
+    if await remove_award_by_index(message.chat.id, target_user_id, index - 1):
         await message.answer(f"✅ Награда №{index} для {target_mention} удалена.", parse_mode="HTML")
     else:
         await message.answer(f"❌ Не удалось найти награду №{index} для {target_mention}.", parse_mode="HTML")

@@ -16,10 +16,10 @@ async def handle_who_invited_command(message: types.Message):
         target_user = message.from_user
         
     # Обновляем кэш для целевого пользователя, так как мы его точно видим сейчас
-    update_user_cache(target_user.id, target_user.username, target_user.full_name)
+    await update_user_cache(target_user.id, target_user.username, target_user.full_name)
     
-    inviter_id = get_inviter(message.chat.id, target_user.id)
-    target_mention = get_mention_by_id(target_user.id)
+    inviter_id = await get_inviter(message.chat.id, target_user.id)
+    target_mention = await get_mention_by_id(target_user.id)
     
     if inviter_id is None:
         await message.reply(
@@ -36,13 +36,13 @@ async def handle_who_invited_command(message: types.Message):
         )
     else:
         # Пытаемся получить информацию об пригласителе из чата, если её нет в кэше
-        inviter_mention = get_mention_by_id(inviter_id)
+        inviter_mention = await get_mention_by_id(inviter_id)
         if "пользователь" in inviter_mention.lower():
             try:
                 member = await message.chat.get_member(user_id=int(inviter_id))
                 if member and member.user:
-                    update_user_cache(member.user.id, member.user.username, member.user.full_name)
-                    inviter_mention = get_mention_by_id(inviter_id)
+                    await update_user_cache(member.user.id, member.user.username, member.user.full_name)
+                    inviter_mention = await get_mention_by_id(inviter_id)
             except Exception:
                 pass
                 

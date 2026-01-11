@@ -26,7 +26,7 @@ async def handle_set_description(message: types.Message):
         await message.reply("❌ Описание слишком длинное (максимум 200 символов).")
         return
     
-    set_description(message.from_user.id, new_desc)
+    await set_description(message.from_user.id, new_desc)
     await message.reply("✅ Описание профиля обновлено!")
 
 @router.message(F.text.lower().startswith("-описание"))
@@ -34,7 +34,7 @@ async def handle_remove_description(message: types.Message):
     """
     Удаляет описание профиля.
     """
-    if remove_description(message.from_user.id):
+    if await remove_description(message.from_user.id):
         await message.reply("✅ Описание профиля удалено.")
     else:
         await message.reply("❌ У вас не было установлено описание.")
@@ -46,10 +46,10 @@ async def handle_profile_callbacks(query: types.CallbackQuery, callback_data: Pr
     Отправляет информацию сообщением, а не алертом.
     """
     target_user_id = callback_data.user_id
-    target_mention = get_mention_by_id(target_user_id)
+    target_mention = await get_mention_by_id(target_user_id)
     
     if callback_data.action == "description":
-        desc = get_description(target_user_id)
+        desc = await get_description(target_user_id)
         if desc:
             await query.message.answer(f"📝 Описание пользователя {target_mention}:\n{desc}", parse_mode="HTML")
         else:
@@ -57,7 +57,7 @@ async def handle_profile_callbacks(query: types.CallbackQuery, callback_data: Pr
         await query.answer()
             
     elif callback_data.action == "awards":
-        awards = get_awards(query.message.chat.id, target_user_id)
+        awards = await get_awards(query.message.chat.id, target_user_id)
         if not awards:
             await query.message.answer(f"🏆 У пользователя {target_mention} пока нет наград.", parse_mode="HTML")
             await query.answer()
@@ -65,7 +65,7 @@ async def handle_profile_callbacks(query: types.CallbackQuery, callback_data: Pr
             
         response = f"🏆 <b>Награды пользователя {target_mention}:</b>\n\n"
         for i, award in enumerate(awards, 1):
-            from_mention = get_mention_by_id(award["from_id"])
+            from_mention = await get_mention_by_id(award["from_id"])
             response += f"награда [{i}] | {award['text']} (от {from_mention})\n"
         
         response += f"\nЧтобы убрать награду, используйте:\n<code>-награда (тег) (номер)</code>"
@@ -109,16 +109,16 @@ async def handle_my_awards_command(message: types.Message):
     Показывает награды отправителя сообщения.
     """
     target_user_id = message.from_user.id
-    target_mention = get_mention_by_id(target_user_id)
+    target_mention = await get_mention_by_id(target_user_id)
     
-    awards = get_awards(message.chat.id, target_user_id)
+    awards = await get_awards(message.chat.id, target_user_id)
     if not awards:
         await message.answer(f"🏆 У вас пока нет наград.", parse_mode="HTML")
         return
         
     response = f"🏆 <b>Ваши награды ({target_mention}):</b>\n\n"
     for i, award in enumerate(awards, 1):
-        from_mention = get_mention_by_id(award["from_id"])
+        from_mention = await get_mention_by_id(award["from_id"])
         response += f"награда [{i}] | {award['text']} (от {from_mention})\n"
     
     response += f"\nЧтобы убрать награду, используйте:\n<code>-награда (номер)</code>"

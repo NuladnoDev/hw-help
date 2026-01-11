@@ -48,8 +48,8 @@ async def handle_duel_command(message: types.Message):
         await message.reply("🤖 Я не участвую в дуэлях, у меня встроенный аимбот.")
         return
 
-    challenger_mention = get_mention_by_id(message.from_user.id)
-    target_mention = get_mention_by_id(target_user_id)
+    challenger_mention = await get_mention_by_id(message.from_user.id)
+    target_mention = await get_mention_by_id(target_user_id)
     
     sent_message = await message.answer(
         f"⚔️ {challenger_mention} вызывает на дуэль {target_mention}!\n\n"
@@ -92,9 +92,9 @@ async def accept_duel(callback: types.CallbackQuery, callback_data: DuelAction):
     # Определяем, кто ходит первым
     first_turn = random.choice([challenger_id, target_id])
     
-    challenger_mention = get_mention_by_id(challenger_id)
-    target_mention = get_mention_by_id(target_id)
-    first_mention = get_mention_by_id(first_turn)
+    challenger_mention = await get_mention_by_id(challenger_id)
+    target_mention = await get_mention_by_id(target_id)
+    first_mention = await get_mention_by_id(first_turn)
     
     # Убираем из ожидающих
     pending_invitations.pop(callback.message.message_id, None)
@@ -112,7 +112,7 @@ async def decline_duel(callback: types.CallbackQuery, callback_data: DuelAction)
         await callback.answer("❌ Это не ваш вызов!", show_alert=True)
         return
 
-    target_mention = get_mention_by_id(callback_data.target_id)
+    target_mention = await get_mention_by_id(callback_data.target_id)
     # Убираем из ожидающих
     pending_invitations.pop(callback.message.message_id, None)
     
@@ -135,8 +135,8 @@ async def handle_duel_turn(callback: types.CallbackQuery, callback_data: DuelAct
     current_player_id = callback.from_user.id
     opponent_id = target_id if current_player_id == challenger_id else challenger_id
     
-    current_mention = get_mention_by_id(current_player_id)
-    opponent_mention = get_mention_by_id(opponent_id)
+    current_mention = await get_mention_by_id(current_player_id)
+    opponent_mention = await get_mention_by_id(opponent_id)
     
     if callback_data.action == "air":
         await callback.message.edit_text(

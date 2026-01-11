@@ -8,7 +8,7 @@ router = Router()
 @router.message(F.text.lower() == "русская рулетка")
 async def handle_roulette_command(message: types.Message):
     """Игра в русскую рулетку."""
-    user_mention = get_mention_by_id(message.from_user.id)
+    user_mention = await get_mention_by_id(message.from_user.id)
     
     # Эффект ожидания
     msg = await message.answer(f"🔫 {user_mention} приставляет револьвер к виску и нажимает на курок...", parse_mode="HTML")

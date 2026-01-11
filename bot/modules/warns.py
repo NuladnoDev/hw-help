@@ -35,16 +35,16 @@ async def warn_user(message: types.Message, target_user_id: int, command_args: s
     reason = clean_args if clean_args else "Не указана"
     
     # Добавляем в БД
-    warn_count = add_warn(message.chat.id, target_user_id, reason, until_date)
+    warn_count = await add_warn(message.chat.id, target_user_id, reason, until_date)
     
     # Получаем упоминания админа и цели с учетом никнеймов
-    admin_mention = get_user_mention_with_nickname(message.from_user)
+    admin_mention = await get_user_mention_with_nickname(message.from_user)
     
     # Пытаемся получить упоминание цели. 
     if message.reply_to_message and message.reply_to_message.from_user.id == target_user_id:
-        target_mention = get_user_mention_with_nickname(message.reply_to_message.from_user)
+        target_mention = await get_user_mention_with_nickname(message.reply_to_message.from_user)
     else:
-        target_mention = get_mention_by_id(target_user_id, "пользователю")
+        target_mention = await get_mention_by_id(target_user_id, "пользователю")
 
     # Формируем сообщение по новому формату
     response = f"⚠️ {admin_mention} выдал предупреждение {target_mention}\nПричина: {reason}"
@@ -59,8 +59,8 @@ async def list_warns(message: types.Message, target_user_id: int):
     """
     Показывает список активных предупреждений пользователя.
     """
-    warns = get_warns(message.chat.id, target_user_id)
-    target_mention = get_mention_by_id(target_user_id)
+    warns = await get_warns(message.chat.id, target_user_id)
+    target_mention = await get_mention_by_id(target_user_id)
     
     if not warns:
         await message.answer(f"✅ У {target_mention} нет активных предупреждений.", parse_mode="HTML")
@@ -74,7 +74,7 @@ async def list_warns(message: types.Message, target_user_id: int):
         until = warn["until"]
         
         response += f"варн [{i}] | {reason} (от {date_str})"
-        if until != "permanent":
+        if until != "permanent" and until:
             until_date = datetime.fromisoformat(until).strftime("%d.%m.%Y %H:%M")
             response += f" — <i>до {until_date}</i>"
         response += "\n"
@@ -87,9 +87,9 @@ async def remove_warn_index(message: types.Message, target_user_id: int, index: 
     """
     Снимает предупреждение по его номеру.
     """
-    target_mention = get_mention_by_id(target_user_id)
+    target_mention = await get_mention_by_id(target_user_id)
     # Индекс от пользователя 1-based, переводим в 0-based
-    if remove_warn_by_index(message.chat.id, target_user_id, index - 1):
+    if await remove_warn_by_index(message.chat.id, target_user_id, index - 1):
         await message.answer(f"✅ Предупреждение №{index} для {target_mention} снято.", parse_mode="HTML")
     else:
         await message.answer(f"❌ Не удалось найти предупреждение №{index} для {target_mention}.", parse_mode="HTML")
@@ -98,8 +98,8 @@ async def unwarn_user(message: types.Message, target_user_id: int):
     """
     Снимает последнее предупреждение.
     """
-    target_mention = get_mention_by_id(target_user_id)
-    if remove_last_warn(message.chat.id, target_user_id):
+    target_mention = await get_mention_by_id(target_user_id)
+    if await remove_last_warn(message.chat.id, target_user_id):
         await message.answer(f"✅ Последнее предупреждение для {target_mention} снято.", parse_mode="HTML")
     else:
         await message.answer(f"❌ У {target_mention} нет активных предупреждений.", parse_mode="HTML")
@@ -108,8 +108,8 @@ async def clear_user_warns(message: types.Message, target_user_id: int):
     """
     Снимает все предупреждения.
     """
-    target_mention = get_mention_by_id(target_user_id)
-    if clear_warns(message.chat.id, target_user_id):
+    target_mention = await get_mention_by_id(target_user_id)
+    if await clear_warns(message.chat.id, target_user_id):
         await message.answer(f"🧹 Все предупреждения для {target_mention} аннулированы.", parse_mode="HTML")
     else:
         await message.answer(f"❌ У {target_mention} нет активных предупреждений.", parse_mode="HTML")

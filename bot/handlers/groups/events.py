@@ -27,21 +27,21 @@ async def on_user_join(message: types.Message):
             continue
 
         # Кэшируем новичка
-        update_user_cache(user.id, user.username, user.full_name)
+        await update_user_cache(user.id, user.username, user.full_name)
         
         # Кэшируем пригласившего (если это не сам пользователь)
         if message.from_user and message.from_user.id != user.id:
-            update_user_cache(message.from_user.id, message.from_user.username, message.from_user.full_name)
+            await update_user_cache(message.from_user.id, message.from_user.username, message.from_user.full_name)
         
         # Сохраняем, кто пригласил
         inviter_id = message.from_user.id if message.from_user and message.from_user.id != user.id else "link"
-        save_inviter(message.chat.id, user.id, inviter_id)
+        await save_inviter(message.chat.id, user.id, inviter_id)
         
-        if is_user_banned(message.chat.id, user.id):
+        if await is_user_banned(message.chat.id, user.id):
             try:
                 # Перебаниваем пользователя
                 await message.chat.ban(user_id=user.id)
-                user_mention = get_user_mention_with_nickname(user)
+                user_mention = await get_user_mention_with_nickname(user)
                 await message.answer(
                     f"⚠️ Внимание! {user_mention} (ID: <code>{user.id}</code>) "
                     f"был забанен ранее и возвращен в бан-лист автоматически.",
@@ -51,12 +51,12 @@ async def on_user_join(message: types.Message):
             except Exception as e:
                 logging.error(f"Ошибка при автоматическом перебане {user.id}: {e}")
         
-        elif is_user_muted(message.chat.id, user.id):
+        elif await is_user_muted(message.chat.id, user.id):
             try:
                 # Накладываем мут повторно
                 permissions = types.ChatPermissions(can_send_messages=False)
                 await message.chat.restrict(user_id=user.id, permissions=permissions)
-                user_mention = get_user_mention_with_nickname(user)
+                user_mention = await get_user_mention_with_nickname(user)
                 await message.answer(
                     f"🤐 {user_mention} вернулся, но его мут ещё не истек. Права ограничены автоматически.",
                     parse_mode="HTML"

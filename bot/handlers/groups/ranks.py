@@ -67,8 +67,8 @@ async def handle_set_rank_command(message: types.Message):
         await message.reply(f"❌ Вы не можете назначить ранг {rank_level}, так как ваш ранг {current_rank_user}.")
         return
         
-    if set_rank(target_user_id, message.chat.id, rank_level):
-        target_mention = get_mention_by_id(target_user_id)
+    if await set_rank(target_user_id, message.chat.id, rank_level):
+        target_mention = await get_mention_by_id(target_user_id)
         rank_name = RANKS[rank_level]
         await message.reply(f"✅ Для пользователя {target_mention} установлен ранг: <b>{rank_name}</b> [{rank_level}]", parse_mode="HTML")
     else:
@@ -106,8 +106,8 @@ async def handle_promote_rank_command(message: types.Message):
         await message.reply(f"❌ Вы не можете повысить до ранга {new_level}, так как ваш ранг {current_rank_user}.")
         return
 
-    if set_rank(target_user_id, message.chat.id, new_level):
-        target_mention = get_mention_by_id(target_user_id)
+    if await set_rank(target_user_id, message.chat.id, new_level):
+        target_mention = await get_mention_by_id(target_user_id)
         rank_name = RANKS[new_level]
         await message.reply(f"✅ Для пользователя {target_mention} установлен ранг: <b>{rank_name}</b> [{new_level}]", parse_mode="HTML")
     else:
@@ -141,8 +141,8 @@ async def handle_demote_rank_command(message: types.Message):
         await message.reply(f"❌ Указанный ранг ({new_level}) не ниже текущего ({current_level}).")
         return
 
-    if set_rank(target_user_id, message.chat.id, new_level):
-        target_mention = get_mention_by_id(target_user_id)
+    if await set_rank(target_user_id, message.chat.id, new_level):
+        target_mention = await get_mention_by_id(target_user_id)
         rank_name = RANKS[new_level]
         await message.reply(f"✅ Для пользователя {target_mention} установлен ранг: <b>{rank_name}</b> [{new_level}]", parse_mode="HTML")
     else:
@@ -161,8 +161,8 @@ async def handle_strip_rank_command(message: types.Message):
         await message.reply("❌ Вы не можете разжаловать этого пользователя (иерархия).", parse_mode="HTML")
         return
 
-    if set_rank(target_user_id, message.chat.id, 1):
-        target_mention = get_mention_by_id(target_user_id)
+    if await set_rank(target_user_id, message.chat.id, 1):
+        target_mention = await get_mention_by_id(target_user_id)
         await message.reply(f"🚫 Пользователь {target_mention} был <b>разжалован</b> (ранг 1).", parse_mode="HTML")
     else:
         await message.reply("❌ Произошла ошибка при сохранении ранга.")
@@ -190,7 +190,7 @@ async def handle_who_are_you_command(message: types.Message):
 @router.message(F.text.lower().in_({"кто админ?", "кто админ", "список админов", "список администраторов"}))
 async def handle_who_is_admin_command(message: types.Message):
     """Показывает список всех рангов и пользователей на них."""
-    ranked_users = get_all_ranked_users(message.chat.id)
+    ranked_users = await get_all_ranked_users(message.chat.id)
     
     # Группируем пользователей по рангам из БД
     rank_groups = {level: [] for level in range(1, 6)}
@@ -231,7 +231,7 @@ async def handle_who_is_admin_command(message: types.Message):
             # Если это глобальный создатель, но он не реальный создатель этой группы 
             # и его нет в БД как 5 ранга для ЭТОЙ группы, мы могли бы его скрыть,
             # но сейчас он просто не попадет в список, так как мы убрали его из get_all_ranked_users()
-            mention = get_mention_by_id(u_id)
+            mention = await get_mention_by_id(u_id)
             section += f" - {mention}\n"
         rank_sections.append(section)
     

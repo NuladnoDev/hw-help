@@ -90,11 +90,21 @@ async def handle_social_action(message: types.Message):
         await message.reply(f"🤔 Вы пытаетесь {action_key} самого себя? Это как?")
         return
 
-    user1_mention = get_mention_by_id(message.from_user.id)
-    user2_mention = get_mention_by_id(target_user_id)
+    user1_mention = await get_mention_by_id(message.from_user.id)
+    user2_mention = await get_mention_by_id(target_user_id)
     
+    # Проверяем, есть ли уже отношения
+    rel_data = await get_relationship(message.from_user.id, target_user_id)
+    if not rel_data:
+        await message.reply(
+            f"❌ Вы не можете совершать РП действия с {user2_mention}, так как у вас нет официальных отношений.\n"
+            f"Предложите их командой: <code>+отн</code> (ответом на сообщение)",
+            parse_mode="HTML"
+        )
+        return
+
     # Обновляем БД
-    rel_data = update_relationship(message.from_user.id, target_user_id, action_key)
+    rel_data = await update_relationship(message.from_user.id, target_user_id, action_key)
     
     action_info = SOCIAL_ACTIONS[action_key]
     result_text = action_info["text"].format(user1=user1_mention, user2=user2_mention)
@@ -119,8 +129,8 @@ async def show_pair_relationships(message: types.Message):
         await message.reply("🤡 Отношения с самим собой всегда прекрасны!")
         return
         
-    rel_data = get_relationship(message.from_user.id, target_id)
-    target_mention = get_mention_by_id(target_id)
+    rel_data = await get_relationship(message.from_user.id, target_id)
+    target_mention = await get_mention_by_id(target_id)
     
     if not rel_data:
         await message.reply(f"🤷‍♂️ У вас пока нет истории отношений с {target_mention}.", parse_mode="HTML")
@@ -153,7 +163,7 @@ async def show_my_relationships(message: types.Message):
     """
     Показывает список всех отношений пользователя.
     """
-    relationships = get_all_user_relationships(message.from_user.id)
+    relationships = await get_all_user_relationships(message.from_user.id)
     
     if not relationships:
         await message.reply("👀 У вас пока нет истории отношений с кем-либо. Попробуйте обнять или поцеловать кого-нибудь!")
@@ -164,7 +174,7 @@ async def show_my_relationships(message: types.Message):
     
     # Показываем топ-10 отношений
     for i, rel in enumerate(relationships[:10], 1):
-        partner_mention = get_mention_by_id(rel["partner_id"])
+        partner_mention = await get_mention_by_id(rel["partner_id"])
         level = get_relationship_level(rel["data"]["total_interactions"])
         count = rel["data"]["total_interactions"]
         response += f"{i}. {partner_mention} — {level} ({count})\n"
@@ -192,8 +202,8 @@ async def propose_relationship(message: types.Message):
         await message.reply("🤡 Отношения с самим собой — это база, но приглашение не требуется.")
         return
 
-    user1_mention = get_mention_by_id(message.from_user.id)
-    user2_mention = get_mention_by_id(target_user_id)
+    user1_mention = await get_mention_by_id(message.from_user.id)
+    user2_mention = await get_mention_by_id(target_user_id)
     
     kb = InlineKeyboardBuilder()
     kb.button(text="✅ Принять", callback_data=RelCallback(action="accept", user1_id=message.from_user.id, user2_id=target_user_id))
@@ -213,12 +223,12 @@ async def handle_rel_callback(callback: types.CallbackQuery, callback_data: RelC
         await callback.answer("❌ Это приглашение не для вас!", show_alert=True)
         return
         
-    user1_mention = get_mention_by_id(callback_data.user1_id)
-    user2_mention = get_mention_by_id(callback_data.user2_id)
+    user1_mention = await get_mention_by_id(callback_data.user1_id)
+    user2_mention = await get_mention_by_id(callback_data.user2_id)
     
     if callback_data.action == "accept":
         # Инициализируем отношения, если их нет (первое действие "начало")
-        update_relationship(callback_data.user1_id, callback_data.user2_id, "начало")
+        await update_relationship(callback_data.user1_id, callback_data.user2_id, "начало")
         await callback.message.edit_text(
             f"🎉 Поздравляем! {user1_mention} и {user2_mention} теперь в отношениях! ❤️",
             parse_mode="HTML"
@@ -243,13 +253,13 @@ async def remove_relationship(message: types.Message):
         await message.reply("🤡 Нельзя разорвать отношения с самим собой.")
         return
         
-    rel_data = get_relationship(message.from_user.id, target_id)
+    rel_data = await get_relationship(message.from_user.id, target_id)
     if not rel_data:
         await message.reply("🤷‍♂️ У вас и так нет истории отношений с этим пользователем.")
         return
         
-    delete_relationship(message.from_user.id, target_id)
-    target_mention = get_mention_by_id(target_id)
+    await delete_relationship(message.from_user.id, target_id)
+    target_mention = await get_mention_by_id(target_id)
     
     await message.reply(
         f"💔 Отношения с {target_mention} были разорваны. Вся история взаимодействий удалена.",
