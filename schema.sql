@@ -93,3 +93,26 @@ CREATE TABLE IF NOT EXISTS group_settings (
     disabled_modules JSONB DEFAULT '[]'::jsonb,
     permission_settings JSONB DEFAULT '{}'::jsonb
 );
+
+-- Кастомные названия рангов для групп
+CREATE TABLE IF NOT EXISTS group_ranks (
+    chat_id BIGINT,
+    rank_number INT,
+    name_nom TEXT, -- Именительный (Кто?)
+    name_gen TEXT, -- Родительный (Кого?)
+    name_ins TEXT, -- Творительный (Кем?)
+    PRIMARY KEY (chat_id, rank_number)
+);
+
+-- ВАЖНО: Отключите RLS для этих таблиц в Supabase SQL Editor, если возникают ошибки 42501:
+-- ALTER TABLE group_ranks DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE group_settings DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE chat_members DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE warns DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE mutes DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE bans DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE awards DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE marriages DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE inviters DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE relationships DISABLE ROW LEVEL SECURITY;

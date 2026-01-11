@@ -126,210 +126,297 @@ async def get_username_by_id(user_id: int) -> Optional[str]:
     return None
 
 async def get_full_name_by_id(user_id: int) -> Optional[str]:
-    res = await asyncio.to_thread(supabase.table("users").select("full_name").eq("user_id", user_id).execute)
-    if res.data:
-        return res.data[0].get("full_name")
+    try:
+        res = await _retry_supabase_call(supabase.table("users").select("full_name").eq("user_id", user_id))
+        if res.data:
+            return res.data[0].get("full_name")
+    except Exception:
+        pass
     return None
 
 async def get_user_id_by_username(username: str) -> Optional[int]:
     clean_username = username.replace("@", "").lower()
-    res = await asyncio.to_thread(supabase.table("users").select("user_id").eq("username", clean_username).execute)
-    if res.data:
-        return res.data[0].get("user_id")
+    try:
+        res = await _retry_supabase_call(supabase.table("users").select("user_id").eq("username", clean_username))
+        if res.data:
+            return res.data[0].get("user_id")
+    except Exception:
+        pass
     return None
 
 # --- Mutes & Bans ---
 
 async def add_mute(chat_id: int, user_id: int, until_date: Optional[datetime] = None):
     until = until_date.isoformat() if until_date else None
-    await asyncio.to_thread(supabase.table("mutes").upsert({
-        "chat_id": chat_id,
-        "user_id": user_id,
-        "until": until
-    }).execute)
+    try:
+        await _retry_supabase_call(supabase.table("mutes").upsert({
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "until": until
+        }))
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении мута: {e}")
 
 async def remove_mute(chat_id: int, user_id: int):
-    await asyncio.to_thread(supabase.table("mutes").delete().eq("chat_id", chat_id).eq("user_id", user_id).execute)
+    try:
+        await _retry_supabase_call(supabase.table("mutes").delete().eq("chat_id", chat_id).eq("user_id", user_id))
+    except Exception as e:
+        logging.error(f"Ошибка при удалении мута: {e}")
 
 async def is_user_muted(chat_id: int, user_id: int) -> bool:
-    res = await asyncio.to_thread(supabase.table("mutes").select("*").eq("chat_id", chat_id).eq("user_id", user_id).execute)
-    if not res.data:
-        return False
-    
-    until = res.data[0].get("until")
-    if not until: # Permanent
-        return True
-    
-    until_date = datetime.fromisoformat(until)
-    if until_date > datetime.now(timezone.utc):
-        return True
-    
-    await remove_mute(chat_id, user_id)
+    try:
+        res = await _retry_supabase_call(supabase.table("mutes").select("*").eq("chat_id", chat_id).eq("user_id", user_id))
+        if not res.data:
+            return False
+        
+        until = res.data[0].get("until")
+        if not until: # Permanent
+            return True
+        
+        until_date = datetime.fromisoformat(until)
+        if until_date > datetime.now(timezone.utc):
+            return True
+        
+        await remove_mute(chat_id, user_id)
+    except Exception:
+        pass
     return False
 
 async def add_ban(chat_id: int, user_id: int, until_date: Optional[datetime] = None):
     until = until_date.isoformat() if until_date else None
-    await asyncio.to_thread(supabase.table("bans").upsert({
-        "chat_id": chat_id,
-        "user_id": user_id,
-        "until": until
-    }).execute)
+    try:
+        await _retry_supabase_call(supabase.table("bans").upsert({
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "until": until
+        }))
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении бана: {e}")
 
 async def remove_ban(chat_id: int, user_id: int):
-    await asyncio.to_thread(supabase.table("bans").delete().eq("chat_id", chat_id).eq("user_id", user_id).execute)
+    try:
+        await _retry_supabase_call(supabase.table("bans").delete().eq("chat_id", chat_id).eq("user_id", user_id))
+    except Exception as e:
+        logging.error(f"Ошибка при удалении бана: {e}")
 
 async def is_user_banned(chat_id: int, user_id: int) -> bool:
-    res = await asyncio.to_thread(supabase.table("bans").select("*").eq("chat_id", chat_id).eq("user_id", user_id).execute)
-    if not res.data:
-        return False
-    
-    until = res.data[0].get("until")
-    if not until: # Permanent
-        return True
-    
-    until_date = datetime.fromisoformat(until)
-    if until_date > datetime.now(timezone.utc):
-        return True
-    
-    await remove_ban(chat_id, user_id)
+    try:
+        res = await _retry_supabase_call(supabase.table("bans").select("*").eq("chat_id", chat_id).eq("user_id", user_id))
+        if not res.data:
+            return False
+        
+        until = res.data[0].get("until")
+        if not until: # Permanent
+            return True
+        
+        until_date = datetime.fromisoformat(until)
+        if until_date > datetime.now(timezone.utc):
+            return True
+        
+        await remove_ban(chat_id, user_id)
+    except Exception:
+        pass
     return False
 
 # --- Warns ---
 
 async def add_warn(chat_id: int, user_id: int, reason: str = "Не указана", until_date: Optional[datetime] = None):
     until = until_date.isoformat() if until_date else None
-    await asyncio.to_thread(supabase.table("warns").insert({
-        "chat_id": chat_id,
-        "user_id": user_id,
-        "reason": reason,
-        "until": until
-    }).execute)
-    
-    res = await asyncio.to_thread(supabase.table("warns").select("id", count="exact").eq("chat_id", chat_id).eq("user_id", user_id).execute)
-    return len(res.data)
+    try:
+        await _retry_supabase_call(supabase.table("warns").insert({
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "reason": reason,
+            "until": until
+        }))
+        
+        res = await _retry_supabase_call(supabase.table("warns").select("id", count="exact").eq("chat_id", chat_id).eq("user_id", user_id))
+        return len(res.data) if res.data else 0
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении варна: {e}")
+        return 0
 
 async def get_warns(chat_id: int, user_id: int) -> List[Dict]:
-    res = await asyncio.to_thread(supabase.table("warns").select("*").eq("chat_id", chat_id).eq("user_id", user_id).execute)
-    if not res.data:
-        return []
-    
-    active_warns = []
-    current_time = datetime.now(timezone.utc)
-    expired_ids = []
-    
-    for warn in res.data:
-        if not warn["until"]:
-            active_warns.append(warn)
-        else:
-            until_date = datetime.fromisoformat(warn["until"])
-            if until_date > current_time:
+    try:
+        res = await _retry_supabase_call(supabase.table("warns").select("*").eq("chat_id", chat_id).eq("user_id", user_id))
+        if not res.data:
+            return []
+        
+        active_warns = []
+        current_time = datetime.now(timezone.utc)
+        expired_ids = []
+        
+        for warn in res.data:
+            if not warn["until"]:
                 active_warns.append(warn)
             else:
-                expired_ids.append(warn["id"])
-    
-    if expired_ids:
-        await asyncio.to_thread(supabase.table("warns").delete().in_("id", expired_ids).execute)
+                until_date = datetime.fromisoformat(warn["until"])
+                if until_date > current_time:
+                    active_warns.append(warn)
+                else:
+                    expired_ids.append(warn["id"])
         
-    return active_warns
+        if expired_ids:
+            await _retry_supabase_call(supabase.table("warns").delete().in_("id", expired_ids))
+            
+        return active_warns
+    except Exception as e:
+        logging.error(f"Ошибка при получении варнов: {e}")
+        return []
 
 async def remove_last_warn(chat_id: int, user_id: int) -> bool:
-    res = await asyncio.to_thread(supabase.table("warns").select("id").eq("chat_id", chat_id).eq("user_id", user_id).order("id", desc=True).limit(1).execute)
-    if res.data:
-        await asyncio.to_thread(supabase.table("warns").delete().eq("id", res.data[0]["id"]).execute)
-        return True
+    try:
+        res = await _retry_supabase_call(supabase.table("warns").select("id").eq("chat_id", chat_id).eq("user_id", user_id).order("id", desc=True).limit(1))
+        if res.data:
+            await _retry_supabase_call(supabase.table("warns").delete().eq("id", res.data[0]["id"]))
+            return True
+    except Exception:
+        pass
     return False
 
 async def remove_warn_by_index(chat_id: int, user_id: int, index: int) -> bool:
     warns = await get_warns(chat_id, user_id)
     if 0 <= index < len(warns):
-        await asyncio.to_thread(supabase.table("warns").delete().eq("id", warns[index]["id"]).execute)
-        return True
+        try:
+            await _retry_supabase_call(supabase.table("warns").delete().eq("id", warns[index]["id"]))
+            return True
+        except Exception:
+            pass
     return False
 
 async def clear_warns(chat_id: int, user_id: int) -> bool:
-    await asyncio.to_thread(supabase.table("warns").delete().eq("chat_id", chat_id).eq("user_id", user_id).execute)
-    return True
+    try:
+        await _retry_supabase_call(supabase.table("warns").delete().eq("chat_id", chat_id).eq("user_id", user_id))
+        return True
+    except Exception:
+        return False
 
 # --- Nicknames & Descriptions ---
 
 async def set_nickname(user_id: int, nickname: str):
-    await asyncio.to_thread(supabase.table("users").upsert({"user_id": user_id, "nickname": nickname}).execute)
+    try:
+        await _retry_supabase_call(supabase.table("users").upsert({"user_id": user_id, "nickname": nickname}))
+    except Exception as e:
+        logging.error(f"Ошибка при установке никнейма: {e}")
 
 async def remove_nickname(user_id: int) -> bool:
-    await asyncio.to_thread(supabase.table("users").update({"nickname": None}).eq("user_id", user_id).execute)
-    return True
+    try:
+        await _retry_supabase_call(supabase.table("users").update({"nickname": None}).eq("user_id", user_id))
+        return True
+    except Exception:
+        return False
 
 async def get_nickname(user_id: int) -> Optional[str]:
-    res = await asyncio.to_thread(supabase.table("users").select("nickname").eq("user_id", user_id).execute)
-    if res.data:
-        return res.data[0].get("nickname")
+    try:
+        res = await _retry_supabase_call(supabase.table("users").select("nickname").eq("user_id", user_id))
+        if res.data:
+            return res.data[0].get("nickname")
+    except Exception:
+        pass
     return None
 
 async def set_description(user_id: int, description: str):
-    await asyncio.to_thread(supabase.table("users").upsert({"user_id": user_id, "description": description}).execute)
+    try:
+        await _retry_supabase_call(supabase.table("users").upsert({"user_id": user_id, "description": description}))
+    except Exception as e:
+        logging.error(f"Ошибка при установке описания: {e}")
 
 async def remove_description(user_id: int) -> bool:
-    await asyncio.to_thread(supabase.table("users").update({"description": None}).eq("user_id", user_id).execute)
-    return True
+    try:
+        await _retry_supabase_call(supabase.table("users").update({"description": None}).eq("user_id", user_id))
+        return True
+    except Exception:
+        return False
 
 async def get_description(user_id: int) -> Optional[str]:
-    res = await asyncio.to_thread(supabase.table("users").select("description").eq("user_id", user_id).execute)
-    if res.data:
-        return res.data[0].get("description")
+    try:
+        res = await _retry_supabase_call(supabase.table("users").select("description").eq("user_id", user_id))
+        if res.data:
+            return res.data[0].get("description")
+    except Exception:
+        pass
     return None
 
 # --- City ---
 
 async def set_city(user_id: int, city: str):
-    await asyncio.to_thread(supabase.table("users").upsert({"user_id": user_id, "city": city}).execute)
+    try:
+        await _retry_supabase_call(supabase.table("users").upsert({"user_id": user_id, "city": city}))
+    except Exception as e:
+        logging.error(f"Ошибка при установке города: {e}")
 
 async def remove_city(user_id: int) -> bool:
-    await asyncio.to_thread(supabase.table("users").update({"city": None}).eq("user_id", user_id).execute)
-    return True
+    try:
+        await _retry_supabase_call(supabase.table("users").update({"city": None}).eq("user_id", user_id))
+        return True
+    except Exception:
+        return False
 
 async def get_city(user_id: int) -> Optional[str]:
-    res = await asyncio.to_thread(supabase.table("users").select("city").eq("user_id", user_id).execute)
-    if res.data:
-        return res.data[0].get("city")
+    try:
+        res = await _retry_supabase_call(supabase.table("users").select("city").eq("user_id", user_id))
+        if res.data:
+            return res.data[0].get("city")
+    except Exception:
+        pass
     return None
 
 # --- Quote ---
 
 async def set_quote(user_id: int, quote: str):
-    await asyncio.to_thread(supabase.table("users").upsert({"user_id": user_id, "quote": quote}).execute)
+    try:
+        await _retry_supabase_call(supabase.table("users").upsert({"user_id": user_id, "quote": quote}))
+    except Exception as e:
+        logging.error(f"Ошибка при установке цитаты: {e}")
 
 async def remove_quote(user_id: int) -> bool:
-    await asyncio.to_thread(supabase.table("users").update({"quote": None}).eq("user_id", user_id).execute)
-    return True
+    try:
+        await _retry_supabase_call(supabase.table("users").update({"quote": None}).eq("user_id", user_id))
+        return True
+    except Exception:
+        return False
 
 async def get_quote(user_id: int) -> Optional[str]:
-    res = await asyncio.to_thread(supabase.table("users").select("quote").eq("user_id", user_id).execute)
-    if res.data:
-        return res.data[0].get("quote")
+    try:
+        res = await _retry_supabase_call(supabase.table("users").select("quote").eq("user_id", user_id))
+        if res.data:
+            return res.data[0].get("quote")
+    except Exception:
+        pass
     return None
 
 # --- Awards ---
 
 async def add_award(chat_id: int, target_user_id: int, admin_user_id: int, text: str) -> int:
-    await asyncio.to_thread(supabase.table("awards").insert({
-        "chat_id": chat_id,
-        "user_id": target_user_id,
-        "from_id": admin_user_id,
-        "text": text
-    }).execute)
-    
-    res = await asyncio.to_thread(supabase.table("awards").select("id", count="exact").eq("chat_id", chat_id).eq("user_id", target_user_id).execute)
-    return len(res.data)
+    try:
+        await _retry_supabase_call(supabase.table("awards").insert({
+            "chat_id": chat_id,
+            "user_id": target_user_id,
+            "from_id": admin_user_id,
+            "text": text
+        }))
+        
+        res = await _retry_supabase_call(supabase.table("awards").select("id", count="exact").eq("chat_id", chat_id).eq("user_id", target_user_id))
+        return len(res.data) if res.data else 0
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении награды: {e}")
+        return 0
 
 async def get_awards(chat_id: int, user_id: int) -> List[Dict]:
-    res = await asyncio.to_thread(supabase.table("awards").select("*").eq("chat_id", chat_id).eq("user_id", user_id).execute)
-    return res.data or []
+    try:
+        res = await _retry_supabase_call(supabase.table("awards").select("*").eq("chat_id", chat_id).eq("user_id", user_id))
+        return res.data or []
+    except Exception:
+        return []
 
 async def remove_award_by_index(chat_id: int, user_id: int, index: int) -> bool:
     awards = await get_awards(chat_id, user_id)
     if 0 <= index < len(awards):
-        await asyncio.to_thread(supabase.table("awards").delete().eq("id", awards[index]["id"]).execute)
-        return True
+        try:
+            await _retry_supabase_call(supabase.table("awards").delete().eq("id", awards[index]["id"]))
+            return True
+        except Exception:
+            pass
     return False
 
 # --- Ranks ---
@@ -355,42 +442,56 @@ DEFAULT_RANK_CASES = {
 
 async def get_group_rank_name(chat_id: int, rank_level: int, case: str = "nom") -> str:
     """Получает название ранга для конкретной группы с учетом падежа."""
-    res = await asyncio.to_thread(
-        supabase.table("group_ranks")
-        .select(f"name_{case}")
-        .eq("chat_id", chat_id)
-        .eq("rank_number", rank_level)
-        .execute
-    )
-    
-    if res.data:
-        return res.data[0].get(f"name_{case}")
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("group_ranks")
+            .select(f"name_{case}")
+            .eq("chat_id", chat_id)
+            .eq("rank_number", rank_level)
+        )
+        
+        if res.data:
+            rank_name = res.data[0].get(f"name_{case}")
+            logging.info(f"DEBUG: Получено кастомное название ранга для чата {chat_id}, уровень {rank_level}: {rank_name}")
+            return rank_name
+        else:
+            logging.info(f"DEBUG: Кастомное название ранга для чата {chat_id}, уровень {rank_level} не найдено, используем дефолт.")
+    except Exception as e:
+        logging.warning(f"Ошибка при получении названия ранга из БД (чат {chat_id}, уровень {rank_level}): {e}")
     
     # Возвращаем дефолтное значение
     return DEFAULT_RANK_CASES.get(rank_level, {}).get(case, RANKS.get(rank_level, "Неизвестно"))
 
 async def set_group_rank_names(chat_id: int, rank_level: int, nom: str, gen: str, ins: str):
     """Устанавливает кастомные названия для ранга в группе."""
-    await asyncio.to_thread(
-        supabase.table("group_ranks").upsert({
-            "chat_id": chat_id,
-            "rank_number": rank_level,
-            "name_nom": nom,
-            "name_gen": gen,
-            "name_ins": ins
-        }).execute
-    )
+    try:
+        await _retry_supabase_call(
+            supabase.table("group_ranks").upsert({
+                "chat_id": chat_id,
+                "rank_number": rank_level,
+                "name_nom": nom,
+                "name_gen": gen,
+                "name_ins": ins
+            })
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении названий рангов: {e}")
 
 async def get_rank(user_id: int, chat_id: int) -> Tuple[int, str]:
     if config.creator_id and user_id == config.creator_id:
         name = await get_group_rank_name(chat_id, 5, "nom")
         return 5, name
     
-    res = await asyncio.to_thread(supabase.table("chat_members").select("rank").eq("chat_id", chat_id).eq("user_id", user_id).execute)
-    if res.data:
-        rank_level = res.data[0].get("rank", 0)
-        name = await get_group_rank_name(chat_id, rank_level, "nom")
-        return rank_level, name
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("chat_members").select("rank").eq("chat_id", chat_id).eq("user_id", user_id)
+        )
+        if res.data:
+            rank_level = res.data[0].get("rank", 0)
+            name = await get_group_rank_name(chat_id, rank_level, "nom")
+            return rank_level, name
+    except Exception as e:
+        logging.error(f"Ошибка при получении ранга пользователя {user_id}: {e}")
     
     name = await get_group_rank_name(chat_id, 0, "nom")
     return 0, name
@@ -398,12 +499,18 @@ async def get_rank(user_id: int, chat_id: int) -> Tuple[int, str]:
 async def set_rank(user_id: int, chat_id: int, rank_level: int) -> bool:
     if rank_level not in RANKS or rank_level < 1:
         return False
-    await asyncio.to_thread(supabase.table("chat_members").upsert({
-        "chat_id": chat_id,
-        "user_id": user_id,
-        "rank": rank_level
-    }).execute)
-    return True
+    try:
+        await _retry_supabase_call(
+            supabase.table("chat_members").upsert({
+                "chat_id": chat_id,
+                "user_id": user_id,
+                "rank": rank_level
+            })
+        )
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении ранга пользователя {user_id}: {e}")
+        return False
 
 async def get_user_rank_context(user_id: int, chat: types.Chat) -> Tuple[int, str, bool]:
     if config.creator_id and user_id == config.creator_id:
@@ -431,63 +538,98 @@ async def can_user_modify_other(admin_user_id: int, target_user_id: int, chat: t
     return admin_rank > target_rank
 
 async def get_all_ranked_users(chat_id: int) -> Dict[int, int]:
-    res = await asyncio.to_thread(supabase.table("chat_members").select("user_id", "rank").eq("chat_id", chat_id).execute)
-    return {item["user_id"]: item["rank"] for item in res.data} if res.data else {}
+    try:
+        res = await _retry_supabase_call(supabase.table("chat_members").select("user_id", "rank").eq("chat_id", chat_id))
+        return {item["user_id"]: item["rank"] for item in res.data} if res.data else {}
+    except Exception as e:
+        logging.error(f"Ошибка при получении всех ранжированных пользователей: {e}")
+        return {}
 
 # --- Invites ---
 
 async def save_inviter(chat_id: int, user_id: int, inviter_id: int):
-    await asyncio.to_thread(supabase.table("inviters").upsert({
-        "chat_id": chat_id,
-        "user_id": user_id,
-        "inviter_id": inviter_id
-    }).execute)
+    try:
+        await _retry_supabase_call(supabase.table("inviters").upsert({
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "inviter_id": inviter_id
+        }))
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении пригласившего: {e}")
 
 async def get_inviter(chat_id: int, user_id: int) -> Optional[int]:
-    res = await asyncio.to_thread(supabase.table("inviters").select("inviter_id").eq("chat_id", chat_id).eq("user_id", user_id).execute)
-    if res.data:
-        return res.data[0].get("inviter_id")
+    try:
+        res = await _retry_supabase_call(supabase.table("inviters").select("inviter_id").eq("chat_id", chat_id).eq("user_id", user_id))
+        if res.data:
+            return res.data[0].get("inviter_id")
+    except Exception:
+        pass
     return None
 
 # --- Marriages ---
 
 async def create_marriage(user1_id: int, user2_id: int):
     u1, u2 = sorted([user1_id, user2_id])
-    await asyncio.to_thread(supabase.table("marriages").upsert({
-        "user1_id": u1,
-        "user2_id": u2
-    }).execute)
+    try:
+        await _retry_supabase_call(supabase.table("marriages").upsert({
+            "user1_id": u1,
+            "user2_id": u2
+        }))
+    except Exception as e:
+        logging.error(f"Ошибка при создании брака: {e}")
 
 async def get_marriage(user_id: int) -> Optional[Dict]:
-    res = await asyncio.to_thread(supabase.table("marriages").select("*").or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}").execute)
-    if res.data:
-        m = res.data[0]
-        return {
-            "partners": [m["user1_id"], m["user2_id"]],
-            "created_at": m["created_at"]
-        }
+    try:
+        res = await _retry_supabase_call(supabase.table("marriages").select("*").or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}"))
+        if res.data:
+            m = res.data[0]
+            return {
+                "partners": [m["user1_id"], m["user2_id"]],
+                "created_at": m["created_at"]
+            }
+    except Exception:
+        pass
     return None
 
 async def remove_marriage(user_id: int) -> bool:
-    res = await asyncio.to_thread(supabase.table("marriages").delete().or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}").execute)
-    return True if res.data else False
+    try:
+        res = await _retry_supabase_call(supabase.table("marriages").delete().or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}"))
+        return True if res.data else False
+    except Exception:
+        return False
 
 # --- Relationships ---
 
 async def update_relationship(user1_id: int, user2_id: int, action_type: str) -> Dict:
     u1, u2 = sorted([int(user1_id), int(user2_id)])
     
-    # Сначала получаем текущие данные
-    res = await asyncio.to_thread(supabase.table("relationships").select("*").eq("user1_id", u1).eq("user2_id", u2).execute)
-    
-    if res.data:
-        rel = res.data[0]
-        actions = rel.get("actions", {})
-        actions[action_type] = actions.get(action_type, 0) + 1
-        total = rel.get("total_interactions", 0) + 1
-    else:
-        actions = {action_type: 1}
-        total = 1
+    try:
+        # Сначала получаем текущие данные
+        res = await _retry_supabase_call(supabase.table("relationships").select("*").eq("user1_id", u1).eq("user2_id", u2))
+        
+        if res.data:
+            rel = res.data[0]
+            actions = rel.get("actions", {})
+            actions[action_type] = actions.get(action_type, 0) + 1
+            total = rel.get("total_interactions", 0) + 1
+        else:
+            actions = {action_type: 1}
+            total = 1
+        
+        # Обновляем или вставляем
+        data = {
+            "user1_id": u1,
+            "user2_id": u2,
+            "actions": actions,
+            "total_interactions": total,
+            "last_interaction": datetime.now(timezone.utc).isoformat()
+        }
+        
+        res = await _retry_supabase_call(supabase.table("relationships").upsert(data))
+        return res.data[0] if res.data else {}
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении отношений: {e}")
+        return {}
         
     new_data = {
         "user1_id": u1,
