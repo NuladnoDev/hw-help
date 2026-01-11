@@ -16,6 +16,8 @@ from .module_management import router as module_mgmt_router
 from .permission_management import router as permission_mgmt_router
 
 router = Router()
+router.include_router(module_mgmt_router)
+router.include_router(permission_mgmt_router)
 router.include_router(weather_router)
 router.include_router(ranks_router)
 router.include_router(invites_router)
@@ -28,5 +30,3 @@ router.include_router(profile_router)
 router.include_router(moderation_router)
 router.include_router(events_router)
 router.include_router(welcome_router)
-router.include_router(module_mgmt_router)
-router.include_router(permission_mgmt_router)
