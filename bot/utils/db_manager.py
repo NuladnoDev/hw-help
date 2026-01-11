@@ -651,29 +651,38 @@ async def get_user_activity_summary(user_id: int) -> Dict[str, int]:
 
 async def set_welcome_message(chat_id: int, message_text: str):
     """Сохраняет текст приветствия для группы."""
-    await asyncio.to_thread(
-        supabase.table("group_settings").upsert({
-            "chat_id": chat_id,
-            "welcome_message": message_text
-        }).execute
-    )
+    try:
+        await asyncio.to_thread(
+            supabase.table("group_settings").upsert({
+                "chat_id": chat_id,
+                "welcome_message": message_text
+            }).execute
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении приветствия: {e}")
 
 async def get_welcome_message(chat_id: int) -> Optional[str]:
     """Получает текст приветствия для группы."""
-    res = await asyncio.to_thread(
-        supabase.table("group_settings").select("welcome_message").eq("chat_id", chat_id).execute
-    )
-    if res.data:
-        return res.data[0].get("welcome_message")
+    try:
+        res = await asyncio.to_thread(
+            supabase.table("group_settings").select("welcome_message").eq("chat_id", chat_id).execute
+        )
+        if res.data:
+            return res.data[0].get("welcome_message")
+    except Exception as e:
+        logging.error(f"Ошибка при получении приветствия: {e}")
     return None
 
 async def get_disabled_modules(chat_id: int) -> List[str]:
     """Возвращает список идентификаторов выключенных модулей для чата."""
-    res = await asyncio.to_thread(
-        supabase.table("group_settings").select("disabled_modules").eq("chat_id", chat_id).execute
-    )
-    if res.data and res.data[0].get("disabled_modules"):
-        return res.data[0]["disabled_modules"]
+    try:
+        res = await asyncio.to_thread(
+            supabase.table("group_settings").select("disabled_modules").eq("chat_id", chat_id).execute
+        )
+        if res.data and res.data[0].get("disabled_modules"):
+            return res.data[0]["disabled_modules"]
+    except Exception as e:
+        logging.error(f"Ошибка при получении списка модулей: {e}")
     return []
 
 async def toggle_module(chat_id: int, module_id: str, enable: bool):
@@ -687,20 +696,26 @@ async def toggle_module(chat_id: int, module_id: str, enable: bool):
         if module_id not in current_disabled:
             current_disabled.append(module_id)
             
-    await _retry_supabase_call(
-        supabase.table("group_settings").upsert({
-            "chat_id": chat_id,
-            "disabled_modules": current_disabled
-        })
-    )
+    try:
+        await _retry_supabase_call(
+            supabase.table("group_settings").upsert({
+                "chat_id": chat_id,
+                "disabled_modules": current_disabled
+            })
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении настроек модулей: {e}")
 
 async def get_permission_settings(chat_id: int) -> Dict[str, int]:
     """Возвращает настройки минимальных рангов для действий в группе."""
-    res = await _retry_supabase_call(
-        supabase.table("group_settings").select("permission_settings").eq("chat_id", chat_id)
-    )
-    if res.data and res.data[0].get("permission_settings"):
-        return res.data[0]["permission_settings"]
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("group_settings").select("permission_settings").eq("chat_id", chat_id)
+        )
+        if res.data and res.data[0].get("permission_settings"):
+            return res.data[0]["permission_settings"]
+    except Exception as e:
+        logging.error(f"Ошибка при получении настроек прав: {e}")
     return {}
 
 async def set_permission_rank(chat_id: int, action_id: str, min_rank: int):
@@ -708,9 +723,12 @@ async def set_permission_rank(chat_id: int, action_id: str, min_rank: int):
     current_settings = await get_permission_settings(chat_id)
     current_settings[action_id] = min_rank
     
-    await _retry_supabase_call(
-        supabase.table("group_settings").upsert({
-            "chat_id": chat_id,
-            "permission_settings": current_settings
-        })
-    )
+    try:
+        await _retry_supabase_call(
+            supabase.table("group_settings").upsert({
+                "chat_id": chat_id,
+                "permission_settings": current_settings
+            })
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении настроек прав: {e}")

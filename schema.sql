@@ -85,3 +85,11 @@ CREATE TABLE IF NOT EXISTS activity_stats (
     count INT DEFAULT 0,
     PRIMARY KEY (user_id, date)
 );
+
+-- Настройки групп
+CREATE TABLE IF NOT EXISTS group_settings (
+    chat_id BIGINT PRIMARY KEY,
+    welcome_message TEXT,
+    disabled_modules JSONB DEFAULT '[]'::jsonb,
+    permission_settings JSONB DEFAULT '{}'::jsonb
+);
