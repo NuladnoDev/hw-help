@@ -1239,6 +1239,60 @@ async def is_user_blacklisted(user_id: int) -> bool:
                     _blacklist_cache.add(item["user_id"])
                 _blacklist_last_update = time.time()
         except Exception as e:
-            logging.error(f"Ошибка при обновлении кэша черного списка: {e}")
+            logging.error(f"Ошибка при проверке черного списка: {e}")
             
     return user_id in _blacklist_cache
+
+async def get_user_balance(user_id: int) -> int:
+    """Возвращает текущий баланс койнов пользователя."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("economy").select("coins").eq("user_id", user_id).limit(1)
+        )
+        if res.data:
+            return res.data[0]["coins"]
+        return 0
+    except Exception as e:
+        logging.error(f"Ошибка при получении баланса {user_id}: {e}")
+        return 0
+
+async def update_user_balance(user_id: int, amount: int) -> int:
+    """
+    Изменяет баланс пользователя на указанную сумму.
+    Использует upsert для создания записи, если её нет.
+    """
+    try:
+        # Сначала получаем текущий баланс
+        current = await get_user_balance(user_id)
+        new_balance = current + amount
+        
+        # Обновляем (или вставляем)
+        await _retry_supabase_call(
+            supabase.table("economy").upsert({
+                "user_id": user_id,
+                "coins": new_balance
+            })
+        )
+        return new_balance
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении баланса {user_id}: {e}")
+        return 0
+
+async def transfer_coins(from_id: int, to_id: int, amount: int) -> bool:
+    """Переводит койны от одного пользователя другому."""
+    if amount <= 0:
+        return False
+        
+    try:
+        current_from = await get_user_balance(from_id)
+        if current_from < amount:
+            return False
+            
+        # Уменьшаем у отправителя
+        await update_user_balance(from_id, -amount)
+        # Увеличиваем у получателя
+        await update_user_balance(to_id, amount)
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при переводе койнов: {e}")
+        return False

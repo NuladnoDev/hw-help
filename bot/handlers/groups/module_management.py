@@ -15,7 +15,8 @@ AVAILABLE_MODULES = {
     5: {"name": "Анекдоты", "id": "jokes"},
     6: {"name": "Погода", "id": "weather"},
     7: {"name": "Репутация", "id": "reputation"},
-    8: {"name": "HW-Антиспам", "id": "antispam"}
+    8: {"name": "HW-Антиспам", "id": "antispam"},
+    9: {"name": "Экономика", "id": "economy"}
 }
 
 @router.message(

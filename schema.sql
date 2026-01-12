@@ -168,9 +168,17 @@ CREATE TABLE IF NOT EXISTS antispam_blacklist (
     added_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Экономика: Койны
+CREATE TABLE IF NOT EXISTS economy (
+    user_id BIGINT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    coins BIGINT DEFAULT 0,
+    last_daily TIMESTAMPTZ -- Для будущей функции ежедневного бонуса
+);
+
 -- ВАЖНО: Отключите RLS для этих таблиц в Supabase SQL Editor, если возникают ошибки 42501:
 -- ALTER TABLE antispam_reports DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE antispam_blacklist DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE economy DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE group_ranks DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE group_settings DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE chat_members DISABLE ROW LEVEL SECURITY;

@@ -3,7 +3,8 @@ from bot.utils.db_manager import (
     get_mention_by_id, get_user_rank_context,
     get_user_profile_data, get_group_rank_name,
     get_user_activity_series, get_user_activity_summary,
-    get_user_clan, get_user_clubs, get_user_reputation
+    get_user_clan, get_user_clubs, get_user_reputation,
+    get_user_balance
 )
 from bot.keyboards.profile_keyboards import get_profile_kb
 from datetime import datetime, timezone
@@ -179,6 +180,9 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     # 5. Получаем репутацию
     rep_data = await get_user_reputation(message.chat.id, target_user_id)
     
+    # 6. Получаем баланс
+    balance = await get_user_balance(target_user_id)
+    
     # Форматирование дат
     first_app_dt = datetime.fromisoformat(db_data["first_appearance"])
     first_app_str = first_app_dt.strftime("%d.%m.%Y")
@@ -189,7 +193,7 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     profile_text = f"👤 Это пользователь {user_mention}\n\n"
     profile_text += (
         f"🎖 <b>Ранг:</b> {rank_name}\n"
-        f"💰 <b>Койнов на счету:</b> soon\n\n"
+        f"💰 <b>Койнов:</b> <code>{balance}</code>\n\n"
     )
 
     profile_text += f"✨ <b>{rep_data['points']}</b> [ ➕ {rep_data['plus_count']} | ➖ {rep_data['minus_count']} ]\n"
