@@ -6,7 +6,7 @@ from bot.utils.filters import ModuleEnabledFilter
 router = Router()
 router.message.filter(F.chat.type.in_({"group", "supergroup"}), ModuleEnabledFilter("shippering"))
 
-@router.message(F.text.lower() == "шипперинг")
+@router.message(F.text.regexp(r"(?i)^!?шипперинг\b"))
 async def handle_shippering(message: types.Message):
     """Шипперит двух случайных участников чата."""
     user_ids = await get_chat_user_ids(message.chat.id)
