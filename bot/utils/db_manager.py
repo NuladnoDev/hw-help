@@ -125,6 +125,17 @@ async def get_username_by_id(user_id: int) -> Optional[str]:
         pass
     return None
 
+async def get_chat_user_ids(chat_id: int) -> List[int]:
+    """Возвращает список ID всех пользователей, которые писали в этом чате."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("chat_members").select("user_id").eq("chat_id", chat_id)
+        )
+        return [item["user_id"] for item in res.data] if res.data else []
+    except Exception as e:
+        logging.error(f"Ошибка при получении участников чата: {e}")
+        return []
+
 async def get_full_name_by_id(user_id: int) -> Optional[str]:
     try:
         res = await _retry_supabase_call(supabase.table("users").select("full_name").eq("user_id", user_id))
@@ -1296,3 +1307,107 @@ async def transfer_coins(from_id: int, to_id: int, amount: int) -> bool:
     except Exception as e:
         logging.error(f"Ошибка при переводе койнов: {e}")
         return False
+
+# --- Каталог ---
+
+async def get_chat_balance(chat_id: int) -> int:
+    """Возвращает баланс чата."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("chat_economy").select("coins").eq("chat_id", chat_id).limit(1)
+        )
+        if res.data:
+            return res.data[0]["coins"]
+        return 0
+    except Exception as e:
+        logging.error(f"Ошибка при получении баланса чата {chat_id}: {e}")
+        return 0
+
+async def update_chat_balance(chat_id: int, amount: int) -> int:
+    """Обновляет баланс чата."""
+    try:
+        current = await get_chat_balance(chat_id)
+        new_balance = max(0, current + amount)
+        await _retry_supabase_call(
+            supabase.table("chat_economy").upsert({
+                "chat_id": chat_id,
+                "coins": new_balance
+            })
+        )
+        return new_balance
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении баланса чата {chat_id}: {e}")
+        return 0
+
+async def get_catalog_categories() -> List[dict]:
+    """Возвращает список категорий каталога."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("catalog_categories").select("*")
+        )
+        return res.data or []
+    except Exception as e:
+        logging.error(f"Ошибка при получении категорий каталога: {e}")
+        return []
+
+async def add_catalog_request(chat_id: int, category_id: int, added_by: int, link: str = None) -> bool:
+    """Добавляет заявку в каталог."""
+    try:
+        await _retry_supabase_call(
+            supabase.table("catalog_chats").upsert({
+                "chat_id": chat_id,
+                "category_id": category_id,
+                "added_by": added_by,
+                "link": link,
+                "is_approved": False
+            })
+        )
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении в каталог {chat_id}: {e}")
+        return False
+
+async def get_catalog_chat(chat_id: int) -> dict:
+    """Получает данные чата в каталоге."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("catalog_chats").select("*").eq("chat_id", chat_id).limit(1)
+        )
+        return res.data[0] if res.data else None
+    except Exception as e:
+        logging.error(f"Ошибка при получении чата из каталога {chat_id}: {e}")
+        return None
+
+async def update_catalog_link(chat_id: int, link: str) -> bool:
+    """Обновляет ссылку чата в каталоге."""
+    try:
+        await _retry_supabase_call(
+            supabase.table("catalog_chats").update({"link": link}).eq("chat_id", chat_id)
+        )
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении ссылки каталога {chat_id}: {e}")
+        return False
+
+async def delete_catalog_link(chat_id: int) -> bool:
+    """Удаляет ссылку чата из каталога (ставит NULL)."""
+    try:
+        await _retry_supabase_call(
+            supabase.table("catalog_chats").update({"link": None}).eq("chat_id", chat_id)
+        )
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при удалении ссылки каталога {chat_id}: {e}")
+        return False
+
+async def get_approved_chats(category_id: int = None) -> List[dict]:
+    """Возвращает список одобренных чатов."""
+    try:
+        query = supabase.table("catalog_chats").select("*").eq("is_approved", True)
+        if category_id:
+            query = query.eq("category_id", category_id)
+        res = await _retry_supabase_call(query)
+        return res.data or []
+    except Exception as e:
+        logging.error(f"Ошибка при получении одобренных чатов: {e}")
+        return []

@@ -175,7 +175,32 @@ CREATE TABLE IF NOT EXISTS economy (
     last_daily TIMESTAMPTZ -- Для будущей функции ежедневного бонуса
 );
 
+-- Экономика чатов (Баланс чата для каталога)
+CREATE TABLE IF NOT EXISTS chat_economy (
+    chat_id BIGINT PRIMARY KEY,
+    coins BIGINT DEFAULT 0
+);
+
+-- Категории каталога
+CREATE TABLE IF NOT EXISTS catalog_categories (
+    id SERIAL PRIMARY KEY,
+    name TEXT UNIQUE
+);
+
+-- Каталог чатов
+CREATE TABLE IF NOT EXISTS catalog_chats (
+    chat_id BIGINT PRIMARY KEY,
+    category_id INT REFERENCES catalog_categories(id),
+    link TEXT,
+    is_approved BOOLEAN DEFAULT FALSE,
+    added_by BIGINT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ВАЖНО: Отключите RLS для этих таблиц в Supabase SQL Editor, если возникают ошибки 42501:
+-- ALTER TABLE chat_economy DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE catalog_categories DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE catalog_chats DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE antispam_reports DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE antispam_blacklist DISABLE ROW LEVEL SECURITY;
 -- ALTER TABLE economy DISABLE ROW LEVEL SECURITY;

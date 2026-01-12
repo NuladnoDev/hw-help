@@ -16,7 +16,15 @@ AVAILABLE_MODULES = {
     6: {"name": "Погода", "id": "weather"},
     7: {"name": "Репутация", "id": "reputation"},
     8: {"name": "HW-Антиспам", "id": "antispam"},
-    9: {"name": "Экономика", "id": "economy"}
+    9: {"name": "Экономика", "id": "economy"},
+    10: {"name": "Шипперинг", "id": "shippering"},
+    11: {"name": "Повтори", "id": "repeat"},
+    12: {"name": "Инфа", "id": "info"},
+    13: {"name": "Данет", "id": "yesno"},
+    14: {"name": "Кто", "id": "who"},
+    15: {"name": "Выбери", "id": "choose"},
+    16: {"name": "Пинг", "id": "ping"},
+    17: {"name": "Каталог", "id": "catalog"}
 }
 
 @router.message(

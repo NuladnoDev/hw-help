@@ -16,8 +16,16 @@ from .clans import router as clans_router
 from .clubs import router as clubs_router
 from .jokes import router as jokes_router
 from .reputation import router as reputation_router
-from .antispam import router as antispam_router
 from .economy import router as economy_router
+from .shippering import router as shippering_router
+from .repeat import router as repeat_router
+from .info import router as info_router
+from .yesno import router as yesno_router
+from .who import router as who_router
+from .choose import router as choose_router
+from .ping import router as ping_router
+from .catalog import router as catalog_router
+from .antispam import router as antispam_router
 from .module_management import router as module_mgmt_router
 from .permission_management import router as permission_mgmt_router
 
@@ -42,3 +50,11 @@ router.include_router(jokes_router)
 router.include_router(reputation_router)
 router.include_router(antispam_router)
 router.include_router(economy_router)
+router.include_router(shippering_router)
+router.include_router(repeat_router)
+router.include_router(info_router)
+router.include_router(yesno_router)
+router.include_router(who_router)
+router.include_router(choose_router)
+router.include_router(ping_router)
+router.include_router(catalog_router)
