@@ -1,11 +1,11 @@
 from aiogram import Router, types, F
-from bot.modules.profile import get_user_profile
+from bot.modules.profile import get_user_profile, generate_level_card_image
 from bot.handlers.groups.moderation import get_target_id
-from bot.keyboards.profile_keyboards import ProfileAction
+from bot.keyboards.profile_keyboards import ProfileAction, get_profile_kb, get_level_kb
 from bot.utils.db_manager import (
     set_description, remove_description, get_description, 
     get_awards, get_mention_by_id, set_city, remove_city, get_city,
-    set_quote, remove_quote, get_quote
+    set_quote, remove_quote, get_quote, get_user_level
 )
 import re
 import logging
@@ -139,6 +139,80 @@ async def handle_profile_callbacks(query: types.CallbackQuery, callback_data: Pr
             await query.message.answer(f"💬 Цитата пользователя {target_mention}:\n\n<i>«{quote}»</i>", parse_mode="HTML")
         else:
             await query.message.answer(f"💬 У пользователя {target_mention} нет цитаты.", parse_mode="HTML")
+        await query.answer()
+
+    elif callback_data.action == "level":
+        level_data = await get_user_level(target_user_id)
+        level = level_data["level"]
+        xp = level_data["xp"]
+        needed = level_data["needed_xp"]
+        remaining = level_data["remaining_xp"]
+        next_reward = level_data["next_reward_coins"]
+        
+        # Получаем имя пользователя для карточки
+        try:
+            member = await query.message.chat.get_member(target_user_id)
+            username = member.user.full_name
+        except:
+            username = "Пользователь"
+            
+        card_buf = await generate_level_card_image(target_user_id, username)
+        
+        text = (
+            f"⭐ <b>Уровень пользователя {target_mention}</b>\n\n"
+            f"Текущий уровень: <b>{level}</b>\n"
+            f"Опыт: <b>{xp}</b> / <b>{needed}</b>\n\n"
+            f"До следующего уровня осталось: <b>{remaining}</b> XP\n"
+            f"Награда за следующий уровень: <b>{next_reward}</b> койнов\n\n"
+            f"💡 <a href='https://telegra.ph/Pomoshch-po-komandam-01-11#Уровень-пользователя'>Как получить опыт?</a>"
+        )
+        
+        if card_buf:
+            photo = types.BufferedInputFile(card_buf.getvalue(), filename=f"level_{target_user_id}.png")
+            if query.message.photo:
+                await query.message.edit_media(
+                    media=types.InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
+                    reply_markup=get_level_kb(target_user_id)
+                )
+            else:
+                await query.message.answer_photo(
+                    photo=photo,
+                    caption=text,
+                    parse_mode="HTML",
+                    reply_markup=get_level_kb(target_user_id)
+                )
+        else:
+            # Фолбэк на текст, если картинка не сгенерилась
+            if query.message.photo:
+                await query.message.edit_caption(caption=text, parse_mode="HTML", reply_markup=get_level_kb(target_user_id))
+            else:
+                await query.message.edit_text(text, parse_mode="HTML", reply_markup=get_level_kb(target_user_id))
+        await query.answer()
+
+    elif callback_data.action == "back":
+        # Возвращаемся к обычному тексту профиля с графиком активности
+        from bot.modules.profile import build_profile_text, generate_activity_chart
+        profile_text, has_quote = await build_profile_text(query.message, target_user_id)
+        chart_buf = await generate_activity_chart(target_user_id)
+        
+        if query.message.photo and chart_buf:
+            photo = types.BufferedInputFile(chart_buf.getvalue(), filename=f"chart_{target_user_id}.png")
+            await query.message.edit_media(
+                media=types.InputMediaPhoto(media=photo, caption=profile_text, parse_mode="HTML"),
+                reply_markup=get_profile_kb(target_user_id, has_quote=has_quote)
+            )
+        elif query.message.photo:
+            await query.message.edit_caption(
+                caption=profile_text,
+                parse_mode="HTML",
+                reply_markup=get_profile_kb(target_user_id, has_quote=has_quote)
+            )
+        else:
+            await query.message.edit_text(
+                profile_text,
+                parse_mode="HTML",
+                reply_markup=get_profile_kb(target_user_id, has_quote=has_quote)
+            )
         await query.answer()
 
 @router.message(F.text.lower().regexp(r'^(кто ты|ты кто|профиль|кто такой|кто я)'))

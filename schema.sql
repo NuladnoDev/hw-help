@@ -175,6 +175,17 @@ CREATE TABLE IF NOT EXISTS economy (
     last_daily TIMESTAMPTZ -- Для будущей функции ежедневного бонуса
 );
 
+-- Уровни пользователей
+CREATE TABLE IF NOT EXISTS user_levels (
+    user_id BIGINT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    level INT DEFAULT 0,
+    xp BIGINT DEFAULT 0,
+    has_marriage_bonus BOOLEAN DEFAULT FALSE,
+    has_clan_bonus BOOLEAN DEFAULT FALSE,
+    has_club_bonus BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Экономика чатов (Баланс чата для каталога)
 CREATE TABLE IF NOT EXISTS chat_economy (
     chat_id BIGINT PRIMARY KEY,

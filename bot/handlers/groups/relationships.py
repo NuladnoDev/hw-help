@@ -2,11 +2,12 @@ import random
 from aiogram import Router, types, F
 from aiogram.filters.callback_data import CallbackData
 from bot.utils.db_manager import (
-    get_mention_by_id, 
-    update_relationship, 
+    get_mention_by_id,
+    update_relationship,
     get_relationship,
     get_all_user_relationships,
-    delete_relationship
+    delete_relationship,
+    add_user_xp
 )
 from bot.handlers.groups.moderation import get_target_id
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -361,6 +362,12 @@ async def handle_social_action(message: types.Message):
     else:
         # Просто выводим текст действия, если отношений нет
         await message.answer(result_text, parse_mode="HTML")
+    
+    # Начисляем опыт за социальное действие инициатору
+    try:
+        await add_user_xp(message.from_user.id, 5)
+    except Exception:
+        pass
 
 @router.message(F.text.lower() == "наши отношения")
 async def show_pair_relationships(message: types.Message):

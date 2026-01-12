@@ -10,26 +10,40 @@ import httpx
 
 # Инициализация клиента Supabase
 supabase: Client = create_client(
-    config.supabase_url, 
+    config.supabase_url,
     config.supabase_key.get_secret_value()
 )
 
-async def _retry_supabase_call(query_builder, retries=3, delay=1):
+async def _retry_supabase_call(query_builder, retries: int = 3, base_delay: float = 0.5):
     """
-    Вспомогательная функция для повторных попыток запроса к Supabase при ошибках сети/SSL.
+    Вспомогательная функция для повторных попыток запроса к Supabase при сетевых ошибках.
+    Логические ошибки (неправильный запрос, 4xx и т.п.) не ретраятся, чтобы не подвешивать бота.
     """
     last_exception = None
-    for attempt in range(retries):
+    delay = base_delay
+    for attempt in range(1, retries + 1):
+        start = time.monotonic()
         try:
-            return await asyncio.to_thread(query_builder.execute)
-        except (httpx.ConnectError, httpx.RemoteProtocolError, Exception) as e:
+            result = await asyncio.to_thread(query_builder.execute)
+            elapsed_ms = (time.monotonic() - start) * 1000
+            if elapsed_ms > 800:
+                logging.warning(f"Медленный запрос к Supabase ({elapsed_ms:.0f} мс): {query_builder}")
+            return result
+        except httpx.HTTPError as e:
             last_exception = e
-            if attempt < retries - 1:
-                logging.warning(f"Попытка {attempt + 1} провалена: {e}. Повтор через {delay} сек...")
+            if attempt < retries:
+                logging.warning(
+                    f"Сетевая ошибка Supabase (попытка {attempt}/{retries}): {e}. "
+                    f"Повтор через {delay:.1f} с..."
+                )
                 await asyncio.sleep(delay)
-                delay *= 2 # Экспоненциальное ожидание
-    
-    logging.error(f"Все {retries} попыток запроса провалены. Последняя ошибка: {last_exception}")
+                delay *= 2
+            else:
+                logging.error(f"Supabase недоступен после {retries} попыток: {e}")
+        except Exception as e:
+            logging.error(f"Ошибка Supabase без ретрая: {e}")
+            raise
+
     raise last_exception
 
 # Кэш для активности
@@ -1307,6 +1321,143 @@ async def transfer_coins(from_id: int, to_id: int, amount: int) -> bool:
     except Exception as e:
         logging.error(f"Ошибка при переводе койнов: {e}")
         return False
+
+# --- Levels ---
+
+def _xp_for_level(level: int) -> int:
+    """Сколько опыта нужно для перехода с уровня level на level+1."""
+    return 50 + level * 25
+
+def _coins_for_level(level: int) -> int:
+    """Сколько койнов выдается за получение указанного уровня."""
+    return 100 * level
+
+async def get_user_level(user_id: int) -> Dict[str, int]:
+    """
+    Возвращает данные по уровню пользователя:
+    level, xp, needed_xp, remaining_xp, next_reward_coins.
+    """
+    level = 0
+    xp = 0
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("user_levels").select("*").eq("user_id", user_id).limit(1)
+        )
+        if res.data:
+            row = res.data[0]
+            level = int(row.get("level", 0) or 0)
+            xp = int(row.get("xp", 0) or 0)
+    except Exception as e:
+        logging.error(f"Ошибка при получении уровня пользователя {user_id}: {e}")
+    
+    needed_xp = _xp_for_level(level)
+    remaining_xp = max(0, needed_xp - xp)
+    next_reward_coins = _coins_for_level(level + 1)
+    
+    return {
+        "level": level,
+        "xp": xp,
+        "needed_xp": needed_xp,
+        "remaining_xp": remaining_xp,
+        "next_reward_coins": next_reward_coins
+    }
+
+async def add_user_xp(user_id: int, amount: int) -> Dict[str, Any]:
+    """
+    Добавляет пользователю опыт.
+    При достижении новых уровней автоматически начисляет койны.
+    Возвращает данные по текущему уровню и список апнутых уровней.
+    """
+    if amount <= 0:
+        data = await get_user_level(user_id)
+        data["leveled_up"] = []
+        data["total_reward_coins"] = 0
+        return data
+    
+    level = 0
+    xp = 0
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("user_levels").select("level,xp").eq("user_id", user_id).limit(1)
+        )
+        if res.data:
+            row = res.data[0]
+            level = int(row.get("level", 0) or 0)
+            xp = int(row.get("xp", 0) or 0)
+    except Exception:
+        pass
+    
+    xp += amount
+    leveled_up: List[Dict[str, int]] = []
+    total_reward = 0
+    
+    while xp >= _xp_for_level(level):
+        need = _xp_for_level(level)
+        if xp < need:
+            break
+        xp -= need
+        level += 1
+        reward = _coins_for_level(level)
+        total_reward += reward
+        await update_user_balance(user_id, reward)
+        leveled_up.append({"level": level, "reward": reward})
+    
+    try:
+        await _retry_supabase_call(
+            supabase.table("user_levels").upsert({
+                "user_id": user_id,
+                "level": level,
+                "xp": xp,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            })
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении уровня пользователя {user_id}: {e}")
+    
+    data = await get_user_level(user_id)
+    data["leveled_up"] = leveled_up
+    data["total_reward_coins"] = total_reward
+    return data
+
+async def apply_once_level_bonus(user_id: int, bonus_type: str, amount: int) -> Dict[str, Any]:
+    """
+    Одноразовый бонус опыта за событие (брак, клан, кружок).
+    bonus_type: 'marriage' | 'clan' | 'club'
+    """
+    column_map = {
+        "marriage": "has_marriage_bonus",
+        "clan": "has_clan_bonus",
+        "club": "has_club_bonus",
+    }
+    column = column_map.get(bonus_type)
+    if not column:
+        return await add_user_xp(user_id, 0)
+    
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("user_levels").select(column).eq("user_id", user_id).limit(1)
+        )
+        if res.data and res.data[0].get(column):
+            return await get_user_level(user_id)
+        
+        if res.data:
+            await _retry_supabase_call(
+                supabase.table("user_levels").update({column: True, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("user_id", user_id)
+            )
+        else:
+            await _retry_supabase_call(
+                supabase.table("user_levels").insert({
+                    "user_id": user_id,
+                    column: True,
+                    "level": 0,
+                    "xp": 0,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                })
+            )
+    except Exception as e:
+        logging.error(f"Ошибка при применении одноразового бонуса {bonus_type} для {user_id}: {e}")
+    
+    return await add_user_xp(user_id, amount)
 
 # --- Каталог ---
 

@@ -46,3 +46,31 @@ INSERT INTO catalog_categories (name) VALUES ('Игры'), ('Общение'), (
 
 -- Посмотреть все категории:
 SELECT * FROM catalog_categories;
+
+
+-- 5. УПРАВЛЕНИЕ УРОВНЯМИ (XP и Level)
+-- Заменить <USER_ID> на ID пользователя
+
+-- Создать таблицу уровней (если еще не создана):
+CREATE TABLE IF NOT EXISTS user_levels (
+    user_id BIGINT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    level INT DEFAULT 0,
+    xp BIGINT DEFAULT 0,
+    has_marriage_bonus BOOLEAN DEFAULT FALSE,
+    has_clan_bonus BOOLEAN DEFAULT FALSE,
+    has_club_bonus BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Посмотреть уровень и опыт пользователя:
+SELECT * FROM user_levels WHERE user_id = <USER_ID>;
+
+-- Установить конкретный уровень и опыт:
+INSERT INTO user_levels (user_id, level, xp) 
+VALUES (<USER_ID>, 5, 0)
+ON CONFLICT (user_id) DO UPDATE SET level = 5, xp = 0;
+
+-- Сбросить одноразовые бонусы (чтобы пользователь мог получить их снова):
+UPDATE user_levels 
+SET has_marriage_bonus = FALSE, has_clan_bonus = FALSE, has_club_bonus = FALSE 
+WHERE user_id = <USER_ID>;

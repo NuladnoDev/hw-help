@@ -4,10 +4,11 @@ from aiogram import Router, types, F
 from aiogram.filters.callback_data import CallbackData
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.utils.db_manager import (
-    get_mention_by_id, 
-    create_marriage, 
-    get_marriage, 
-    remove_marriage
+    get_mention_by_id,
+    create_marriage,
+    get_marriage,
+    remove_marriage,
+    apply_once_level_bonus
 )
 from bot.handlers.groups.moderation import get_target_id
 
@@ -87,6 +88,8 @@ async def accept_marriage(callback: types.CallbackQuery, callback_data: Marriage
         return
 
     await create_marriage(proposer_id, target_id)
+    await apply_once_level_bonus(proposer_id, "marriage", 200)
+    await apply_once_level_bonus(target_id, "marriage", 200)
     
     proposer_mention = await get_mention_by_id(proposer_id)
     target_mention = await get_mention_by_id(target_id)

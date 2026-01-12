@@ -1,7 +1,43 @@
 import datetime
 import random
+import os
+import re
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
+
+def get_font(size=14):
+    """
+    Максимально надежный поиск шрифта с поддержкой кириллицы.
+    """
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    
+    # Список путей для проверки (в порядке приоритета)
+    font_paths = [
+        # 1. Твой шрифт в проекте
+        os.path.join(project_root, "bot", "assets", "fonts", "arial.ttf"),
+        # 2. Системные Windows
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "C:\\Windows\\Fonts\\segoeui.ttf",
+        "C:\\Windows\\Fonts\\tahoma.ttf",
+        # 3. Системные Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        # 4. Просто по имени (если в PATH)
+        "arial.ttf",
+        "DejaVuSans.ttf"
+    ]
+    
+    for path in font_paths:
+        try:
+            if os.path.exists(path):
+                return ImageFont.truetype(path, size)
+        except:
+            continue
+            
+    # Если совсем всё плохо - дефолт
+    return ImageFont.load_default()
 
 def generate_preview_chart():
     # Имитация данных (30 дней)
@@ -26,15 +62,6 @@ def generate_preview_chart():
     axis_color = (120, 120, 120)
     bar_color = (255, 140, 0) # Оранжевый
     
-    def get_font(size=14):
-        fonts = ["arial.ttf", "C:\\Windows\\Fonts\\arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
-        for f in fonts:
-            try:
-                return ImageFont.truetype(f, size)
-            except:
-                continue
-        return ImageFont.load_default()
-
     font = get_font(14)
     title_font = get_font(18)
     grid_font = get_font(11)
@@ -45,7 +72,7 @@ def generate_preview_chart():
         y = margin_top + int(plot_height * i / steps)
         draw.line([(margin_left, y), (width - margin_right, y)], fill=grid_color)
         
-        # Значение справа (например: 1000, 750, 500, 250, 0)
+        # Значение справа
         val = int(max_count * (steps - i) / steps) if max_count > 0 else 0
         val_str = str(val)
         v_bbox = draw.textbbox((0, 0), val_str, font=grid_font)
@@ -90,10 +117,9 @@ def generate_preview_chart():
             bbox = draw.textbbox((0, 0), label, font=font)
             lw = bbox[2] - bbox[0]
             draw.text((x_center - lw / 2, height - margin_bottom + 5), label, fill=axis_color, font=font)
-    
-    output_path = "preview_chart.png"
-    img.save(output_path)
-    print(f"Готово! График сохранен в файл: {output_path}")
+
+    img.save("preview_chart.png")
+    print("Предпросмотр графика сохранен в preview_chart.png")
 
 if __name__ == "__main__":
     generate_preview_chart()

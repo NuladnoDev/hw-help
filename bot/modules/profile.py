@@ -4,13 +4,60 @@ from bot.utils.db_manager import (
     get_user_profile_data, get_group_rank_name,
     get_user_activity_series, get_user_activity_summary,
     get_user_clan, get_user_clubs, get_user_reputation,
-    get_user_balance
+    get_user_balance, get_user_level
 )
 from bot.keyboards.profile_keyboards import get_profile_kb
 from datetime import datetime, timezone
 from io import BytesIO
+import os
+import re
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
+
+def get_font(size=14):
+    """
+    Максимально надежный поиск шрифта с поддержкой кириллицы.
+    """
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
+    # Список путей для проверки (в порядке приоритета)
+    font_paths = [
+        # 1. Твой шрифт в проекте
+        os.path.join(project_root, "bot", "assets", "fonts", "arial.ttf"),
+        # 2. Системные Windows
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "C:\\Windows\\Fonts\\segoeui.ttf",
+        "C:\\Windows\\Fonts\\tahoma.ttf",
+        # 3. Системные Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        # 4. Просто по имени (если в PATH)
+        "arial.ttf",
+        "DejaVuSans.ttf"
+    ]
+    
+    for path in font_paths:
+        try:
+            if os.path.exists(path):
+                return ImageFont.truetype(path, size)
+        except:
+            continue
+            
+    # Если совсем всё плохо - дефолт
+    return ImageFont.load_default()
+
+def clean_text(text: str) -> str:
+    """
+    Оставляет только то, что точно отобразится (латиница, кириллица, цифры).
+    """
+    if not text:
+        return "User"
+    # Оставляем: a-z, A-Z, а-я, А-Я, ё, Ё, 0-9 и базовые знаки
+    cleaned = re.sub(r'[^a-zA-Zа-яА-ЯёЁ0-9\s.,!@#$%^&*()\-+=?<>:;\[\]{}|\'\"\\/`~]', '', text)
+    result = cleaned.strip()
+    return result if result else "User"
 
 def get_relative_time(dt: datetime) -> str:
     """
@@ -38,102 +85,69 @@ def get_relative_time(dt: datetime) -> str:
 
 async def generate_activity_chart(user_id: int, days: int = 30) -> Optional[BytesIO]:
     series = await get_user_activity_series(user_id, days=days)
-    # Если данных вообще нет или все значения по нулям, создаем пустой график вместо None
     if not series:
         return None
     
     max_count = max(count for _, count in series) or 0
-    # Даже если активность нулевая, мы все равно рисуем пустую сетку, чтобы картинка была
-    # if max_count == 0:
-    #     return None
     
-    def get_font(size=14):
-        # Пути к шрифтам на Linux (хост) и Windows (локально)
-        fonts = [
-            "bot/assets/fonts/arial.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "C:\\Windows\\Fonts\\arial.ttf",
-            "arial.ttf"
-        ]
-        for f in fonts:
-            try:
-                return ImageFont.truetype(f, size)
-            except:
-                continue
-        return ImageFont.load_default()
-
-    width, height = 800, 400
-    margin_left, margin_right, margin_top, margin_bottom = 40, 75, 40, 60
+    width, height = 800, 450
+    margin_left, margin_right, margin_top, margin_bottom = 60, 40, 80, 70
     plot_width = width - margin_left - margin_right
     plot_height = height - margin_top - margin_bottom
     
+    # Светлая тема
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
-    grid_color = (235, 235, 235)
-    axis_color = (120, 120, 120)
-    bar_color = (255, 140, 0)
     
-    font = get_font(14)
-    title_font = get_font(18)
+    grid_color = (245, 245, 245)
+    axis_color = (180, 180, 180)
+    bar_color = (255, 120, 0) # Оранжевый
+    text_color = (40, 40, 40)
+    
+    title_font = get_font(30)
     label_font = get_font(14)
-    grid_font = get_font(11)
+    grid_font = get_font(12)
     
-    # Сетка и метки значений
-    steps = 4
+    # Заголовок
+    title = "АКТИВНОСТЬ ЗА 30 ДНЕЙ"
+    draw.text((40, 25), title, fill=text_color, font=title_font)
+    draw.line([(40, 65), (140, 65)], fill=bar_color, width=5)
+    
+    # Сетка
+    steps = 5
     for i in range(steps + 1):
-        y = margin_top + int(plot_height * i / steps)
-        draw.line([(margin_left, y), (width - margin_right, y)], fill=grid_color)
+        y = margin_top + plot_height - int(plot_height * i / steps)
+        draw.line([(margin_left, y), (width - margin_right, y)], fill=grid_color, width=1)
         
-        # Значение справа (например: 1000, 750, 500, 250, 0)
-        val = int(max_count * (steps - i) / steps) if max_count > 0 else 0
-        val_str = str(val)
-        v_bbox = draw.textbbox((0, 0), val_str, font=grid_font)
-        v_h = v_bbox[3] - v_bbox[1]
-        draw.text((width - margin_right + 5, y - v_h / 2), val_str, fill=axis_color, font=grid_font)
-    
-    title = "Статистика активности"
-    # Исправление для новых версий Pillow (textsize удален)
-    bbox = draw.textbbox((0, 0), title, font=title_font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    draw.text(((width - tw) / 2, 10), title, fill=axis_color, font=title_font)
-    
-    y_label = "Сообщения"
-    # Создаем временное изображение для поворота текста
-    l_bbox = draw.textbbox((0, 0), y_label, font=label_font)
-    l_w = l_bbox[2] - l_bbox[0]
-    l_h = l_bbox[3] - l_bbox[1]
-    
-    # Рисуем вертикально справа (после чисел)
-    txt_img = Image.new("RGBA", (l_w, l_h + 5), (255, 255, 255, 0))
-    d = ImageDraw.Draw(txt_img)
-    d.text((0, 0), y_label, fill=axis_color, font=label_font)
-    rotated = txt_img.rotate(90, expand=True)
-    img.paste(rotated, (width - 30, margin_top + (plot_height - l_w) // 2), rotated)
+        val = int(max_count * i / steps) if max_count > 0 else 0
+        draw.text((15, y - 8), str(val), fill=axis_color, font=grid_font)
     
     n = len(series)
-    if n == 0:
-        return None
-    
     bar_spacing = plot_width / max(n, 1)
-    bar_width = max(4, int(bar_spacing * 0.6))
+    bar_width = max(4, int(bar_spacing * 0.75))
     
     for idx, (day, count) in enumerate(series):
         x_center = margin_left + int(bar_spacing * idx + bar_spacing / 2)
-        bar_height = int((count / max_count) * plot_height) if max_count > 0 else 0
+        h = int((count / max_count) * plot_height) if max_count > 0 else 0
+        
         x0 = x_center - bar_width // 2
         x1 = x_center + bar_width // 2
         y1 = margin_top + plot_height
-        y0 = y1 - bar_height
-        draw.rectangle([x0, y0, x1, y1], fill=bar_color)
+        y0 = y1 - h
         
-        if idx % max(1, n // 10) == 0:
+        if h > 2:
+            # Чистый оранжевый столбик со скруглением сверху
+            draw.rounded_rectangle([x0, y0, x1, y1], radius=6, fill=bar_color)
+        else:
+            # Минимальная отметка для нулевой/малой активности
+            draw.rounded_rectangle([x0, y1-3, x1, y1], radius=2, fill=(235, 235, 235))
+            
+        # Подписи дат (каждые 5 дней)
+        if idx % 5 == 0:
             label = day.strftime("%d.%m")
-            bbox = draw.textbbox((0, 0), label, font=font)
+            bbox = draw.textbbox((0, 0), label, font=label_font)
             lw = bbox[2] - bbox[0]
-            lh = bbox[3] - bbox[1]
-            draw.text((x_center - lw / 2, height - margin_bottom + 5), label, fill=axis_color, font=font)
+            draw.text((x_center - lw / 2, height - margin_bottom + 15), label, fill=axis_color, font=label_font)
     
     buf = BytesIO()
     img.save(buf, format="PNG")
@@ -141,20 +155,108 @@ async def generate_activity_chart(user_id: int, days: int = 30) -> Optional[Byte
     return buf
 
 
+async def generate_level_card_image(user_id: int, username: str) -> Optional[BytesIO]:
+    level_data = await get_user_level(user_id)
+    level = level_data["level"]
+    xp = level_data["xp"]
+    needed = level_data["needed_xp"]
+    
+    # Очистка имени от эмодзи для предотвращения квадратов
+    display_username = clean_text(username)
+    if not display_username:
+        display_username = "User"
+
+    width, height = 800, 400
+    bg_color = (255, 255, 255)
+    accent_color = (255, 120, 0)
+    text_main = (40, 40, 40)
+    text_secondary = (140, 140, 140)
+    bar_bg = (245, 245, 245)
+    
+    image = Image.new("RGB", (width, height), bg_color)
+    draw = ImageDraw.Draw(image)
+    
+    font_name = get_font(42)
+    font_lvl_label = get_font(24)
+    font_lvl_val = get_font(80)
+    font_xp = get_font(22)
+    font_avatar = get_font(70)
+
+    # Декор
+    draw.ellipse([width-150, -50, width+50, 150], fill=(255, 120, 0, 30))
+    
+    # Аватар
+    avatar_size = 160
+    av_x, av_y = 50, 50
+    draw.ellipse([av_x-2, av_y-2, av_x+avatar_size+2, av_y+avatar_size+2], outline=(240, 240, 240), width=2)
+    
+    # Дефолтный аватар
+    draw.ellipse([av_x, av_y, av_x+avatar_size, av_y+avatar_size], fill=accent_color)
+    letter = display_username[0].upper() if display_username else "?"
+    bbox = draw.textbbox((0, 0), letter, font=font_avatar)
+    tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
+    draw.text((av_x+(avatar_size-tw)/2, av_y+(avatar_size-th)/2 - 8), letter, font=font_avatar, fill=(255, 255, 255))
+
+    # Инфо
+    info_x = av_x + avatar_size + 40
+    draw.text((info_x, av_y + 10), display_username, font=font_name, fill=text_main)
+    draw.text((info_x, av_y + 65), "УРОВЕНЬ", font=font_lvl_label, fill=text_secondary)
+    draw.text((info_x, av_y + 85), str(level), font=font_lvl_val, fill=accent_color)
+    
+    # Прогресс-бар
+    bar_x, bar_y = 50, 270
+    bar_w, bar_h = 700, 55
+    draw.rounded_rectangle([bar_x, bar_y, bar_x+bar_w, bar_y+bar_h], radius=28, fill=bar_bg)
+    
+    progress = min(1.0, xp / needed) if needed > 0 else 0
+    if progress > 0:
+        fill_w = int(bar_w * progress)
+        fill_w = max(fill_w, 56)
+        draw.rounded_rectangle([bar_x, bar_y, bar_x+fill_w, bar_y+bar_h], radius=28, fill=accent_color)
+    
+    xp_text = f"{xp} / {needed} XP"
+    bbox = draw.textbbox((0, 0), xp_text, font=font_xp)
+    tw = bbox[2]-bbox[0]
+    draw.text((bar_x + (bar_w - tw)/2, bar_y + bar_h + 10), xp_text, font=font_xp, fill=text_secondary)
+
+    buf = BytesIO()
+    image.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
 async def get_user_profile(message: types.Message, target_user_id: int):
     """
-    Формирует и отправляет профиль пользователя в новом формате.
-    Оптимизировано для быстрой работы.
+    Формирует и отправляет профиль пользователя.
     """
-    # 1. Сначала получаем все данные из БД одним пакетом
+    profile_text, has_quote = await build_profile_text(message, target_user_id)
+    
+    chart = await generate_activity_chart(target_user_id)
+    
+    if chart:
+        photo = types.BufferedInputFile(chart.getvalue(), filename=f"chart_{target_user_id}.png")
+        await message.answer_photo(
+            photo=photo,
+            caption=profile_text,
+            parse_mode="HTML",
+            reply_markup=get_profile_kb(target_user_id, has_quote=has_quote)
+        )
+    else:
+        await message.answer(
+            profile_text,
+            parse_mode="HTML",
+            reply_markup=get_profile_kb(target_user_id, has_quote=has_quote)
+        )
+
+async def build_profile_text(message: types.Message, target_user_id: int):
+    """
+    Строит текст профиля и признак наличия цитаты без отправки сообщения.
+    Используется как для первого показа, так и для возврата из меню уровней.
+    """
     db_data = await get_user_profile_data(target_user_id, message.chat.id)
     
-    # 2. Пытаемся получить информацию из Telegram (только если нужно)
     try:
-        # Используем кэш из db_data, если там есть ник
         display_name = db_data.get("nickname")
-        
-        # Если в чате, пробуем получить актуальное имя
         member = await message.chat.get_member(target_user_id)
         user = member.user
         
@@ -163,27 +265,16 @@ async def get_user_profile(message: types.Message, target_user_id: int):
             
         user_mention = user.mention_html(display_name)
         
-        # Проверяем на создателя чата для ранга
         if member.status == "creator" and db_data["rank_level"] < 5:
             db_data["rank_level"] = 5
-            
     except Exception:
-        # Если не удалось получить инфо из Telegram, используем get_mention_by_id (он тоже лезет в БД, но это крайний случай)
         user_mention = await get_mention_by_id(target_user_id)
-
-    # 3. Получаем название ранга с учетом падежа (может быть в кэше БД)
+    
     rank_name = await get_group_rank_name(message.chat.id, db_data["rank_level"], "nom")
-    
-    # 4. Получаем статистику активности текстом
     stats = await get_user_activity_summary(target_user_id)
-    
-    # 5. Получаем репутацию
     rep_data = await get_user_reputation(message.chat.id, target_user_id)
-    
-    # 6. Получаем баланс
     balance = await get_user_balance(target_user_id)
     
-    # Форматирование дат
     first_app_dt = datetime.fromisoformat(db_data["first_appearance"])
     first_app_str = first_app_dt.strftime("%d.%m.%Y")
     
@@ -195,20 +286,15 @@ async def get_user_profile(message: types.Message, target_user_id: int):
         f"🎖 <b>Ранг:</b> {rank_name}\n"
         f"💰 <b>Койнов:</b> <code>{balance}</code>\n\n"
     )
-
+    
     profile_text += f"✨ <b>{rep_data['points']}</b> [ ➕ {rep_data['plus_count']} | ➖ {rep_data['minus_count']} ]\n"
-
-    # Город пока не отображаем, но данные сохраняем в db_data
-    # if db_data.get("city"):
-    #     profile_text += f"🏙 <b>Город:</b> {db_data['city']}\n"
-
+    
     marriage = db_data.get("marriage")
     if marriage:
         partner_id = [p for p in marriage["partners"] if p != target_user_id][0]
         partner_mention = await get_mention_by_id(partner_id)
         profile_text += f"💍 <b>В браке с:</b> {partner_mention}\n"
-
-    # Клан и кружки
+    
     clan = await get_user_clan(message.chat.id, target_user_id)
     if clan:
         profile_text += f"🛡 <b>Клан:</b> {clan['name']}\n"
@@ -217,26 +303,12 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     if clubs:
         clubs_str = ", ".join([c["name"] for c in clubs])
         profile_text += f"🎨 <b>Кружки:</b> {clubs_str}\n"
-
+    
     profile_text += (
         f"📅 <b>Впервые замечен:</b> {first_app_str}\n"
         f"⏳ <b>Последний актив:</b> {last_active_str}\n\n"
         f"📈 <b>Актив (д|н|м|весь):</b> {stats['day']} | {stats['week']} | {stats['month']} | {stats['total']}"
     )
     
-    chart = await generate_activity_chart(target_user_id)
-    
-    if chart:
-        photo = types.BufferedInputFile(chart.getvalue(), filename=f"chart_{target_user_id}.png")
-        await message.answer_photo(
-            photo=photo,
-            caption=profile_text,
-            parse_mode="HTML",
-            reply_markup=get_profile_kb(target_user_id, has_quote=bool(db_data.get("quote")))
-        )
-    else:
-        await message.answer(
-            profile_text,
-            parse_mode="HTML",
-            reply_markup=get_profile_kb(target_user_id, has_quote=bool(db_data.get("quote")))
-        )
+    has_quote = bool(db_data.get("quote"))
+    return profile_text, has_quote

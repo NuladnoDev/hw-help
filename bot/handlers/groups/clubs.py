@@ -1,7 +1,14 @@
 from aiogram import Router, types, F
 from bot.utils.db_manager import (
-    create_club, get_club_by_name, delete_club, join_club, 
-    leave_club, get_user_clubs, get_mention_by_id, get_all_clubs
+    create_club,
+    get_club_by_name,
+    delete_club,
+    join_club,
+    leave_club,
+    get_user_clubs,
+    get_mention_by_id,
+    get_all_clubs,
+    apply_once_level_bonus
 )
 from bot.utils.filters import RankFilter, ModuleEnabledFilter
 import re
@@ -31,6 +38,7 @@ async def handle_create_club(message: types.Message):
     club_id = await create_club(message.chat.id, club_name, message.from_user.id)
     if club_id:
         await message.reply(f"✅ Кружок <b>{club_name}</b> успешно создан! Вы стали его создателем.", parse_mode="HTML")
+        await apply_once_level_bonus(message.from_user.id, "club", 200)
     else:
         await message.reply("❌ Произошла ошибка при создании кружка.")
 

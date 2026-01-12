@@ -1,7 +1,14 @@
 from aiogram import Router, types, F
 from bot.utils.db_manager import (
-    create_clan, get_clan_by_name, delete_clan, join_clan, 
-    leave_clan, get_user_clan, get_mention_by_id, get_all_clans
+    create_clan,
+    get_clan_by_name,
+    delete_clan,
+    join_clan,
+    leave_clan,
+    get_user_clan,
+    get_mention_by_id,
+    get_all_clans,
+    apply_once_level_bonus
 )
 from bot.utils.filters import RankFilter, ModuleEnabledFilter
 import re
@@ -37,6 +44,7 @@ async def handle_create_clan(message: types.Message):
     clan_id = await create_clan(message.chat.id, clan_name, message.from_user.id)
     if clan_id:
         await message.reply(f"✅ Клан <b>{clan_name}</b> успешно создан! Вы стали его создателем.", parse_mode="HTML")
+        await apply_once_level_bonus(message.from_user.id, "clan", 200)
     else:
         await message.reply("❌ Произошла ошибка при создании клана.")
 
