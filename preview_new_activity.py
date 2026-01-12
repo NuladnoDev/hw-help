@@ -37,6 +37,17 @@ def get_font(size=14):
     # Если совсем всё плохо - дефолт
     return ImageFont.load_default()
 
+def clean_text(text: str) -> str:
+    """
+    Оставляет только то, что точно отобразится (латиница, кириллица, цифры).
+    """
+    if not text:
+        return "User"
+    # Оставляем: a-z, A-Z, а-я, А-Я, ё, Ё, 0-9 и базовые знаки
+    cleaned = re.sub(r'[^a-zA-Zа-яА-ЯёЁ0-9\s.,!@#$%^&*()\-+=?<>:;\[\]{}|\'\"\\/`~]', '', text)
+    result = cleaned.strip()
+    return result if result else "User"
+
 def generate_modern_activity_chart():
     width, height = 800, 450
     bg_color = (255, 255, 255)

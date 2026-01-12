@@ -48,6 +48,10 @@ async def _retry_supabase_call(query_builder, retries: int = 3, base_delay: floa
 
 # Кэш для активности
 _activity_cache = {}
+# Кэш для настроек модулей (chat_id -> {"modules": list, "timestamp": float})
+_modules_cache = {}
+# Кэш для настроек прав (chat_id -> {"settings": dict, "timestamp": float})
+_permissions_cache = {}
 _CACHE_TTL = 300
 
 # --- Users ---
@@ -855,12 +859,22 @@ async def get_welcome_message(chat_id: int) -> Optional[str]:
 
 async def get_disabled_modules(chat_id: int) -> List[str]:
     """Возвращает список идентификаторов выключенных модулей для чата."""
+    now = time.monotonic()
+    if chat_id in _modules_cache:
+        cache_entry = _modules_cache[chat_id]
+        if now - cache_entry["timestamp"] < _CACHE_TTL:
+            return cache_entry["modules"]
+            
     try:
         res = await _retry_supabase_call(
             supabase.table("group_settings").select("disabled_modules").eq("chat_id", chat_id)
         )
+        disabled = []
         if res.data and res.data[0].get("disabled_modules"):
-            return res.data[0]["disabled_modules"]
+            disabled = res.data[0]["disabled_modules"]
+            
+        _modules_cache[chat_id] = {"modules": disabled, "timestamp": now}
+        return disabled
     except Exception as e:
         logging.error(f"Ошибка при получении списка модулей: {e}")
     return []
@@ -869,31 +883,46 @@ async def toggle_module(chat_id: int, module_id: str, enable: bool):
     """Включает или выключает модуль в группе."""
     current_disabled = await get_disabled_modules(chat_id)
     
+    # Создаем копию списка, чтобы не менять кэш напрямую до успешного апдейта в БД
+    new_disabled = list(current_disabled)
+    
     if enable:
-        if module_id in current_disabled:
-            current_disabled.remove(module_id)
+        if module_id in new_disabled:
+            new_disabled.remove(module_id)
     else:
-        if module_id not in current_disabled:
-            current_disabled.append(module_id)
+        if module_id not in new_disabled:
+            new_disabled.append(module_id)
             
     try:
         await _retry_supabase_call(
             supabase.table("group_settings").upsert({
                 "chat_id": chat_id,
-                "disabled_modules": current_disabled
+                "disabled_modules": new_disabled
             })
         )
+        # Обновляем кэш после успешной записи
+        _modules_cache[chat_id] = {"modules": new_disabled, "timestamp": time.monotonic()}
     except Exception as e:
         logging.error(f"Ошибка при сохранении настроек модулей: {e}")
 
 async def get_permission_settings(chat_id: int) -> Dict[str, int]:
     """Возвращает настройки минимальных рангов для действий в группе."""
+    now = time.monotonic()
+    if chat_id in _permissions_cache:
+        cache_entry = _permissions_cache[chat_id]
+        if now - cache_entry["timestamp"] < _CACHE_TTL:
+            return cache_entry["settings"]
+            
     try:
         res = await _retry_supabase_call(
             supabase.table("group_settings").select("permission_settings").eq("chat_id", chat_id)
         )
+        settings = {}
         if res.data and res.data[0].get("permission_settings"):
-            return res.data[0]["permission_settings"]
+            settings = res.data[0]["permission_settings"]
+            
+        _permissions_cache[chat_id] = {"settings": settings, "timestamp": now}
+        return settings
     except Exception as e:
         logging.error(f"Ошибка при получении настроек прав: {e}")
     return {}

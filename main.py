@@ -5,7 +5,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.default import DefaultBotProperties
 from bot.config_reader import config
 from bot.handlers import admin, groups, user
-from bot.middlewares import ActivityMiddleware
+from bot.middlewares import ActivityMiddleware, AntispamMiddleware
 
 async def main():
     # Настройка логирования
@@ -30,6 +30,7 @@ async def main():
 
     # Регистрация middleware
     dp.message.outer_middleware(ActivityMiddleware())
+    dp.message.outer_middleware(AntispamMiddleware())
 
     # Регистрация роутеров
     dp.include_router(admin.router)

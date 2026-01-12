@@ -69,19 +69,6 @@ async def handle_antispam_report(message: types.Message):
         except Exception as e:
             logging.error(f"Не удалось кикнуть спамера: {e}")
 
-@router.message()
-async def check_for_spammers(message: types.Message):
-    """Проверяет каждого отправителя сообщения на наличие в черном списке."""
-    if not message.from_user or message.from_user.is_bot:
-        return
-
-    if await is_user_blacklisted(message.from_user.id):
-        try:
-            await message.chat.ban(user_id=message.from_user.id)
-            await message.delete()
-        except Exception:
-            pass
-
 @router.chat_member()
 async def on_user_join(event: types.ChatMemberUpdated):
     """Проверяет вступающих пользователей."""
