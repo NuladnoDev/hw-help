@@ -9,7 +9,13 @@ router = Router()
 # Доступные модули для управления
 AVAILABLE_MODULES = {
     1: {"name": "Дуэли", "id": "duels"},
-    2: {"name": "Русская рулетка", "id": "roulette"}
+    2: {"name": "Русская рулетка", "id": "roulette"},
+    3: {"name": "Кланы", "id": "clans"},
+    4: {"name": "Кружки", "id": "clubs"},
+    5: {"name": "Анекдоты", "id": "jokes"},
+    6: {"name": "Погода", "id": "weather"},
+    7: {"name": "Репутация", "id": "reputation"},
+    8: {"name": "HW-Антиспам", "id": "antispam"}
 }
 
 @router.message(

@@ -2,7 +2,8 @@ from aiogram import types
 from bot.utils.db_manager import (
     get_mention_by_id, get_user_rank_context,
     get_user_profile_data, get_group_rank_name,
-    get_user_activity_series, get_user_activity_summary
+    get_user_activity_series, get_user_activity_summary,
+    get_user_clan, get_user_clubs, get_user_reputation
 )
 from bot.keyboards.profile_keyboards import get_profile_kb
 from datetime import datetime, timezone
@@ -175,6 +176,9 @@ async def get_user_profile(message: types.Message, target_user_id: int):
     # 4. Получаем статистику активности текстом
     stats = await get_user_activity_summary(target_user_id)
     
+    # 5. Получаем репутацию
+    rep_data = await get_user_reputation(message.chat.id, target_user_id)
+    
     # Форматирование дат
     first_app_dt = datetime.fromisoformat(db_data["first_appearance"])
     first_app_str = first_app_dt.strftime("%d.%m.%Y")
@@ -188,14 +192,27 @@ async def get_user_profile(message: types.Message, target_user_id: int):
         f"💰 <b>Койнов на счету:</b> soon\n\n"
     )
 
-    if db_data.get("city"):
-        profile_text += f"🏙 <b>Город:</b> {db_data['city']}\n"
+    profile_text += f"✨ <b>{rep_data['points']}</b> [ ➕ {rep_data['plus_count']} | ➖ {rep_data['minus_count']} ]\n"
+
+    # Город пока не отображаем, но данные сохраняем в db_data
+    # if db_data.get("city"):
+    #     profile_text += f"🏙 <b>Город:</b> {db_data['city']}\n"
 
     marriage = db_data.get("marriage")
     if marriage:
         partner_id = [p for p in marriage["partners"] if p != target_user_id][0]
         partner_mention = await get_mention_by_id(partner_id)
         profile_text += f"💍 <b>В браке с:</b> {partner_mention}\n"
+
+    # Клан и кружки
+    clan = await get_user_clan(message.chat.id, target_user_id)
+    if clan:
+        profile_text += f"🛡 <b>Клан:</b> {clan['name']}\n"
+    
+    clubs = await get_user_clubs(message.chat.id, target_user_id)
+    if clubs:
+        clubs_str = ", ".join([c["name"] for c in clubs])
+        profile_text += f"🎨 <b>Кружки:</b> {clubs_str}\n"
 
     profile_text += (
         f"📅 <b>Впервые замечен:</b> {first_app_str}\n"

@@ -41,8 +41,9 @@ async def on_user_joined(event: ChatMemberUpdated):
         if not welcome_template:
             return
 
-        user = event.from_user
-        # Заменяем плейсхолдер !Name на упоминание пользователя
+        # Пользователь, который вступил
+        user = event.new_chat_member.user
+        # Заменяем плейсхолдер !Name на имя пользователя
         welcome_text = welcome_template.replace("!Name", user.full_name)
         
         await event.bot.send_message(

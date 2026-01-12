@@ -522,10 +522,18 @@ async def get_user_rank_context(user_id: int, chat: types.Chat) -> Tuple[int, st
         if member.status == "creator":
             name = await get_group_rank_name(chat.id, 5, "nom")
             return 5, name, True
+        
+        # Если администратор Telegram, даем минимум 4 ранг
+        is_tg_admin = member.status == "administrator"
     except Exception:
-        pass
+        is_tg_admin = False
     
     level, name = await get_rank(user_id, chat.id)
+    
+    if is_tg_admin and level < 4:
+        level = 4
+        name = await get_group_rank_name(chat.id, 4, "nom")
+        
     return level, name, False
 
 async def can_user_modify_other(admin_user_id: int, target_user_id: int, chat: types.Chat) -> bool:
@@ -630,43 +638,41 @@ async def update_relationship(user1_id: int, user2_id: int, action_type: str) ->
     except Exception as e:
         logging.error(f"Ошибка при обновлении отношений: {e}")
         return {}
-        
-    new_data = {
-        "user1_id": u1,
-        "user2_id": u2,
-        "total_interactions": total,
-        "last_interaction": datetime.now(timezone.utc).isoformat(),
-        "actions": actions
-    }
-    
-    await asyncio.to_thread(supabase.table("relationships").upsert(new_data).execute)
-    return new_data
 
 async def get_relationship(user1_id: int, user2_id: int) -> Optional[Dict]:
     u1, u2 = sorted([int(user1_id), int(user2_id)])
-    res = await asyncio.to_thread(supabase.table("relationships").select("*").eq("user1_id", u1).eq("user2_id", u2).execute)
-    return res.data[0] if res.data else None
+    try:
+        res = await _retry_supabase_call(supabase.table("relationships").select("*").eq("user1_id", u1).eq("user2_id", u2))
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
 
 async def delete_relationship(user1_id: int, user2_id: int) -> bool:
     u1, u2 = sorted([int(user1_id), int(user2_id)])
-    await asyncio.to_thread(supabase.table("relationships").delete().eq("user1_id", u1).eq("user2_id", u2).execute)
-    return True
+    try:
+        await _retry_supabase_call(supabase.table("relationships").delete().eq("user1_id", u1).eq("user2_id", u2))
+        return True
+    except Exception:
+        return False
 
 async def get_all_user_relationships(user_id: int) -> List[Dict]:
-    res = await asyncio.to_thread(supabase.table("relationships").select("*").or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}").execute)
-    if not res.data:
+    try:
+        res = await _retry_supabase_call(supabase.table("relationships").select("*").or_(f"user1_id.eq.{user_id},user2_id.eq.{user_id}"))
+        if not res.data:
+            return []
+        
+        results = []
+        for rel in res.data:
+            partner_id = rel["user2_id"] if rel["user1_id"] == user_id else rel["user1_id"]
+            results.append({
+                "partner_id": partner_id,
+                "data": rel
+            })
+        
+        results.sort(key=lambda x: x["data"]["total_interactions"], reverse=True)
+        return results
+    except Exception:
         return []
-    
-    results = []
-    for rel in res.data:
-        partner_id = rel["user2_id"] if rel["user1_id"] == user_id else rel["user1_id"]
-        results.append({
-            "partner_id": partner_id,
-            "data": rel
-        })
-    
-    results.sort(key=lambda x: x["data"]["total_interactions"], reverse=True)
-    return results
 
 # --- Mentions ---
 
@@ -700,33 +706,30 @@ async def update_user_activity(user_id: int):
 
     now_iso = datetime.now(timezone.utc).isoformat()
     try:
-        await asyncio.to_thread(supabase.table("users").upsert({
+        await _retry_supabase_call(supabase.table("users").upsert({
             "user_id": user_id,
             "last_message": now_iso
-        }).execute)
+        }))
         
         today = datetime.now(timezone.utc).date().isoformat()
-        res = await asyncio.to_thread(
+        res = await _retry_supabase_call(
             supabase.table("activity_stats")
             .select("count")
             .eq("user_id", user_id)
             .eq("date", today)
-            .execute
         )
         if res.data:
             current = res.data[0].get("count", 0) or 0
-            await asyncio.to_thread(
+            await _retry_supabase_call(
                 supabase.table("activity_stats")
                 .update({"count": current + 1})
                 .eq("user_id", user_id)
                 .eq("date", today)
-                .execute
             )
         else:
-            await asyncio.to_thread(
+            await _retry_supabase_call(
                 supabase.table("activity_stats")
                 .insert({"user_id": user_id, "date": today, "count": 1})
-                .execute
             )
         
         _activity_cache[user_id] = now_ts
@@ -734,9 +737,12 @@ async def update_user_activity(user_id: int):
         logging.warning(f"Ошибка при обновлении активности (RLS/DB): {e}")
 
 async def get_user_stats(user_id: int) -> Dict:
-    res = await asyncio.to_thread(supabase.table("users").select("first_appearance", "last_message").eq("user_id", user_id).execute)
-    if res.data:
-        return res.data[0]
+    try:
+        res = await _retry_supabase_call(supabase.table("users").select("first_appearance", "last_message").eq("user_id", user_id))
+        if res.data:
+            return res.data[0]
+    except Exception:
+        pass
     return {
         "first_appearance": datetime.now(timezone.utc).isoformat(),
         "last_message": datetime.now(timezone.utc).isoformat()
@@ -746,16 +752,18 @@ async def get_user_activity_series(user_id: int, days: int = 30) -> List[Tuple[d
     today = datetime.now(timezone.utc).date()
     start_date = today - timedelta(days=days - 1)
     
-    res = await asyncio.to_thread(
-        supabase.table("activity_stats")
-        .select("date,count")
-        .eq("user_id", user_id)
-        .gte("date", start_date.isoformat())
-        .order("date")
-        .execute
-    )
-    
-    raw = {datetime.fromisoformat(item["date"]).date(): item.get("count", 0) for item in (res.data or [])}
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("activity_stats")
+            .select("date,count")
+            .eq("user_id", user_id)
+            .gte("date", start_date.isoformat())
+            .order("date")
+        )
+        
+        raw = {datetime.fromisoformat(item["date"]).date(): item.get("count", 0) for item in (res.data or [])}
+    except Exception:
+        raw = {}
     
     series: List[Tuple[datetime, int]] = []
     current = start_date
@@ -781,14 +789,16 @@ async def get_user_activity_summary(user_id: int) -> Dict[str, int]:
         summary["month"] = sum(count for _, count in series_30)
         
     # Для "все время" суммируем все записи из таблицы
-    res = await asyncio.to_thread(
-        supabase.table("activity_stats")
-        .select("count")
-        .eq("user_id", user_id)
-        .execute
-    )
-    if res.data:
-        summary["total"] = sum(item.get("count", 0) or 0 for item in res.data)
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("activity_stats")
+            .select("count")
+            .eq("user_id", user_id)
+        )
+        if res.data:
+            summary["total"] = sum(item.get("count", 0) or 0 for item in res.data)
+    except Exception:
+        pass
             
     return summary
 
@@ -797,11 +807,11 @@ async def get_user_activity_summary(user_id: int) -> Dict[str, int]:
 async def set_welcome_message(chat_id: int, message_text: str):
     """Сохраняет текст приветствия для группы."""
     try:
-        await asyncio.to_thread(
+        await _retry_supabase_call(
             supabase.table("group_settings").upsert({
                 "chat_id": chat_id,
                 "welcome_message": message_text
-            }).execute
+            })
         )
     except Exception as e:
         logging.error(f"Ошибка при сохранении приветствия: {e}")
@@ -809,8 +819,8 @@ async def set_welcome_message(chat_id: int, message_text: str):
 async def get_welcome_message(chat_id: int) -> Optional[str]:
     """Получает текст приветствия для группы."""
     try:
-        res = await asyncio.to_thread(
-            supabase.table("group_settings").select("welcome_message").eq("chat_id", chat_id).execute
+        res = await _retry_supabase_call(
+            supabase.table("group_settings").select("welcome_message").eq("chat_id", chat_id)
         )
         if res.data:
             return res.data[0].get("welcome_message")
@@ -821,8 +831,8 @@ async def get_welcome_message(chat_id: int) -> Optional[str]:
 async def get_disabled_modules(chat_id: int) -> List[str]:
     """Возвращает список идентификаторов выключенных модулей для чата."""
     try:
-        res = await asyncio.to_thread(
-            supabase.table("group_settings").select("disabled_modules").eq("chat_id", chat_id).execute
+        res = await _retry_supabase_call(
+            supabase.table("group_settings").select("disabled_modules").eq("chat_id", chat_id)
         )
         if res.data and res.data[0].get("disabled_modules"):
             return res.data[0]["disabled_modules"]
@@ -877,3 +887,358 @@ async def set_permission_rank(chat_id: int, action_id: str, min_rank: int):
         )
     except Exception as e:
         logging.error(f"Ошибка при сохранении настроек прав: {e}")
+
+# --- Clans ---
+
+async def create_clan(chat_id: int, name: str, creator_id: int) -> Optional[int]:
+    """Создает новый клан и возвращает его ID."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clans").insert({
+                "chat_id": chat_id,
+                "name": name,
+                "creator_id": creator_id
+            })
+        )
+        if res.data:
+            clan_id = res.data[0]["id"]
+            # Сразу добавляем создателя в клан
+            await join_clan(chat_id, clan_id, creator_id)
+            return clan_id
+    except Exception as e:
+        logging.error(f"Ошибка при создании клана: {e}")
+    return None
+
+async def get_clan_by_name(chat_id: int, name: str) -> Optional[Dict]:
+    """Получает информацию о клане по названию в чате."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clans").select("*").eq("chat_id", chat_id).ilike("name", name)
+        )
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
+
+async def get_clan_by_id(clan_id: int) -> Optional[Dict]:
+    """Получает информацию о клане по ID."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clans").select("*").eq("id", clan_id)
+        )
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
+
+async def delete_clan(clan_id: int):
+    """Удаляет клан."""
+    try:
+        await _retry_supabase_call(
+            supabase.table("clans").delete().eq("id", clan_id)
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при удалении клана: {e}")
+
+async def join_clan(chat_id: int, clan_id: int, user_id: int) -> bool:
+    """Добавляет пользователя в клан (выходя из предыдущего)."""
+    try:
+        # В клане можно быть только в одном (PRIMARY KEY на chat_id, user_id)
+        await _retry_supabase_call(
+            supabase.table("clan_members").upsert({
+                "chat_id": chat_id,
+                "clan_id": clan_id,
+                "user_id": user_id
+            })
+        )
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при вступлении в клан: {e}")
+        return False
+
+async def leave_clan(chat_id: int, user_id: int):
+    """Удаляет пользователя из клана."""
+    try:
+        await _retry_supabase_call(
+            supabase.table("clan_members").delete().eq("chat_id", chat_id).eq("user_id", user_id)
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при выходе из клана: {e}")
+
+async def get_user_clan(chat_id: int, user_id: int) -> Optional[Dict]:
+    """Возвращает информацию о клане, в котором состоит пользователь."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clan_members").select("clan_id, clans(*)").eq("chat_id", chat_id).eq("user_id", user_id)
+        )
+        if res.data and res.data[0].get("clans"):
+            return res.data[0]["clans"]
+    except Exception:
+        pass
+    return None
+
+async def get_clan_members(clan_id: int) -> List[int]:
+    """Возвращает список ID пользователей в клане."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clan_members").select("user_id").eq("clan_id", clan_id)
+        )
+        return [item["user_id"] for item in res.data] if res.data else []
+    except Exception:
+        return []
+
+async def get_all_clans(chat_id: int) -> List[Dict]:
+    """Возвращает список всех кланов в чате."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clans").select("*").eq("chat_id", chat_id).order("created_at")
+        )
+        return res.data if res.data else []
+    except Exception as e:
+        logging.error(f"Ошибка при получении списка кланов: {e}")
+        return []
+
+# --- Clubs ---
+
+async def create_club(chat_id: int, name: str, creator_id: int) -> Optional[int]:
+    """Создает новый кружок."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clubs").insert({
+                "chat_id": chat_id,
+                "name": name,
+                "creator_id": creator_id
+            })
+        )
+        if res.data:
+            club_id = res.data[0]["id"]
+            await join_club(chat_id, club_id, creator_id)
+            return club_id
+    except Exception as e:
+        logging.error(f"Ошибка при создании кружка: {e}")
+    return None
+
+async def get_club_by_name(chat_id: int, name: str) -> Optional[Dict]:
+    """Получает информацию о кружке по названию."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clubs").select("*").eq("chat_id", chat_id).ilike("name", name)
+        )
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
+
+async def delete_club(club_id: int):
+    """Удаляет кружок."""
+    try:
+        await _retry_supabase_call(
+            supabase.table("clubs").delete().eq("id", club_id)
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при удалении кружка: {e}")
+
+async def join_club(chat_id: int, club_id: int, user_id: int) -> bool:
+    """Добавляет пользователя в кружок."""
+    try:
+        await _retry_supabase_call(
+            supabase.table("club_members").upsert({
+                "chat_id": chat_id,
+                "club_id": club_id,
+                "user_id": user_id
+            })
+        )
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при вступлении в кружок: {e}")
+        return False
+
+async def leave_club(chat_id: int, club_id: int, user_id: int):
+    """Удаляет пользователя из кружка."""
+    try:
+        await _retry_supabase_call(
+            supabase.table("club_members").delete().eq("chat_id", chat_id).eq("club_id", club_id).eq("user_id", user_id)
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при выходе из кружка: {e}")
+
+async def get_user_clubs(chat_id: int, user_id: int) -> List[Dict]:
+    """Возвращает список кружков, в которых состоит пользователь."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("club_members").select("club_id, clubs(*)").eq("chat_id", chat_id).eq("user_id", user_id)
+        )
+        return [item["clubs"] for item in res.data if item.get("clubs")] if res.data else []
+    except Exception:
+        return []
+
+async def get_club_members(club_id: int) -> List[int]:
+    """Возвращает список ID пользователей в кружке."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("club_members").select("user_id").eq("club_id", club_id)
+        )
+        return [item["user_id"] for item in res.data] if res.data else []
+    except Exception:
+        return []
+
+async def get_all_clubs(chat_id: int) -> List[Dict]:
+    """Возвращает список всех кружков в чате."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("clubs").select("*").eq("chat_id", chat_id).order("created_at")
+        )
+        return res.data if res.data else []
+    except Exception as e:
+        logging.error(f"Ошибка при получении списка кружков: {e}")
+        return []
+
+# --- Репутация ---
+
+async def update_reputation(chat_id: int, user_id: int, delta: int) -> Dict[str, int]:
+    """Изменяет репутацию пользователя и возвращает словарь со статистикой."""
+    try:
+        # Сначала получаем текущее значение
+        res = await _retry_supabase_call(
+            supabase.table("reputation").select("*").eq("chat_id", chat_id).eq("user_id", user_id)
+        )
+        
+        data = res.data[0] if res.data else {"points": 0, "plus_count": 0, "minus_count": 0}
+        
+        current_points = data.get("points", 0)
+        current_plus = data.get("plus_count", 0)
+        current_minus = data.get("minus_count", 0)
+        
+        new_points = current_points + delta
+        new_plus = current_plus + (1 if delta > 0 else 0)
+        new_minus = current_minus + (1 if delta < 0 else 0)
+        
+        stats = {
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "points": new_points,
+            "plus_count": new_plus,
+            "minus_count": new_minus
+        }
+        
+        await _retry_supabase_call(
+            supabase.table("reputation").upsert(stats)
+        )
+        return stats
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении репутации: {e}")
+        return {"points": 0, "plus_count": 0, "minus_count": 0}
+
+async def get_user_reputation(chat_id: int, user_id: int) -> Dict[str, int]:
+    """Возвращает статистику репутации пользователя."""
+    try:
+        res = await _retry_supabase_call(
+            supabase.table("reputation").select("*").eq("chat_id", chat_id).eq("user_id", user_id)
+        )
+        if res.data:
+            return {
+                "points": res.data[0].get("points", 0),
+                "plus_count": res.data[0].get("plus_count", 0),
+                "minus_count": res.data[0].get("minus_count", 0)
+            }
+    except Exception:
+        pass
+    return {"points": 0, "plus_count": 0, "minus_count": 0}
+
+async def get_top_reputation(chat_id: int, limit: int = 10) -> List[Dict]:
+    """Возвращает топ пользователей по репутации в чате."""
+    try:
+        # Мы хотим получить поинты и данные пользователя
+        res = await _retry_supabase_call(
+            supabase.table("reputation")
+            .select("points, user_id, users(full_name, nickname)")
+            .eq("chat_id", chat_id)
+            .order("points", desc=True)
+            .limit(limit)
+        )
+        return res.data if res.data else []
+    except Exception as e:
+        logging.error(f"Ошибка при получении топа репутации: {e}")
+        return []
+
+async def add_antispam_report(reporter_id: int, target_id: int, chat_id: int) -> Dict:
+    """
+    Добавляет жалобу на пользователя. 
+    Ограничение: 1 жалоба в сутки от одного пользователя.
+    При достижении 5 жалоб пользователь попадает в черный список.
+    """
+    try:
+        # 1. Проверяем лимит (1 жалоба в 24 часа)
+        yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+        
+        check_res = await _retry_supabase_call(
+            supabase.table("antispam_reports")
+            .select("id")
+            .eq("reporter_id", reporter_id)
+            .gt("created_at", yesterday)
+            .limit(1)
+        )
+        
+        if check_res.data:
+            return {"status": "limit_exceeded"}
+
+        # 2. Добавляем жалобу
+        await _retry_supabase_call(
+            supabase.table("antispam_reports").insert({
+                "reporter_id": reporter_id,
+                "target_id": target_id,
+                "chat_id": chat_id
+            })
+        )
+
+        # 3. Считаем общее количество жалоб
+        count_res = await _retry_supabase_call(
+            supabase.table("antispam_reports")
+            .select("id", count="exact")
+            .eq("target_id", target_id)
+        )
+        
+        report_count = count_res.count if count_res.count is not None else 0
+
+        # 4. Если жалоб 5 или больше — в черный список
+        is_blacklisted = False
+        if report_count >= 5:
+            # Проверяем, нет ли уже в списке
+            bl_check = await _retry_supabase_call(
+                supabase.table("antispam_blacklist").select("user_id").eq("user_id", target_id)
+            )
+            if not bl_check.data:
+                await _retry_supabase_call(
+                    supabase.table("antispam_blacklist").insert({"user_id": target_id})
+                )
+                is_blacklisted = True
+
+        return {
+            "status": "success",
+            "count": report_count,
+            "is_blacklisted": is_blacklisted
+        }
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении жалобы антиспам: {e}")
+        return {"status": "error"}
+
+# Глобальный кэш для черного списка антиспама
+_blacklist_cache = set()
+_blacklist_last_update = 0
+
+async def is_user_blacklisted(user_id: int) -> bool:
+    """Проверяет, находится ли пользователь в черном списке антиспама."""
+    global _blacklist_last_update
+    
+    # Обновляем кэш раз в 5 минут
+    if time.time() - _blacklist_last_update > 300:
+        try:
+            res = await _retry_supabase_call(
+                supabase.table("antispam_blacklist").select("user_id")
+            )
+            if res.data:
+                _blacklist_cache.clear()
+                for item in res.data:
+                    _blacklist_cache.add(item["user_id"])
+                _blacklist_last_update = time.time()
+        except Exception as e:
+            logging.error(f"Ошибка при обновлении кэша черного списка: {e}")
+            
+    return user_id in _blacklist_cache

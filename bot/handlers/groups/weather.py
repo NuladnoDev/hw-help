@@ -1,11 +1,12 @@
 import aiohttp
 from aiogram import Router, types, F
 import logging
+from bot.utils.filters import ModuleEnabledFilter
 
 router = Router()
 
-# Фильтр для проверки, что команда отправлена в группе или супергруппе
-router.message.filter(F.chat.type.in_({"group", "supergroup"}))
+# Фильтр для проверки, что команда отправлена в группе или супергруппе и модуль включен
+router.message.filter(F.chat.type.in_({"group", "supergroup"}), ModuleEnabledFilter("weather"))
 
 async def get_weather(city: str):
     """Получает погоду через wttr.in с принудительным русским форматом."""

@@ -12,6 +12,11 @@ from .weather import router as weather_router
 from .marriages import router as marriages_router
 from .relationships import router as relationships_router
 from .welcome_handlers import router as welcome_router
+from .clans import router as clans_router
+from .clubs import router as clubs_router
+from .jokes import router as jokes_router
+from .reputation import router as reputation_router
+from .antispam import router as antispam_router
 from .module_management import router as module_mgmt_router
 from .permission_management import router as permission_mgmt_router
 
@@ -30,3 +35,8 @@ router.include_router(profile_router)
 router.include_router(moderation_router)
 router.include_router(events_router)
 router.include_router(welcome_router)
+router.include_router(clans_router)
+router.include_router(clubs_router)
+router.include_router(jokes_router)
+router.include_router(reputation_router)
+router.include_router(antispam_router)

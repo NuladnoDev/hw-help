@@ -44,18 +44,18 @@ class ModuleEnabledFilter(BaseFilter):
     def __init__(self, module_id: str):
         self.module_id = module_id
 
-    async def __call__(self, event: Union[types.Message, types.CallbackQuery]) -> bool:
-        chat_id = event.chat.id if isinstance(event, types.Message) else event.message.chat.id
-        disabled_modules = await get_disabled_modules(chat_id)
-        
-        if self.module_id in disabled_modules:
-            # Если это сообщение, можно ответить, что модуль выключен
-            if isinstance(event, types.Message):
-                # Здесь можно ничего не отвечать, чтобы бот просто игнорировал команду
-                pass
+    async def __call__(self, event: Union[types.Message, types.CallbackQuery, types.ChatMemberUpdated]) -> bool:
+        if isinstance(event, types.Message):
+            chat_id = event.chat.id
+        elif isinstance(event, types.CallbackQuery):
+            chat_id = event.message.chat.id
+        elif isinstance(event, types.ChatMemberUpdated):
+            chat_id = event.chat.id
+        else:
             return False
-            
-        return True
+        
+        disabled_modules = await get_disabled_modules(chat_id)
+        return self.module_id not in disabled_modules
 
 class RankFilter(BaseFilter):
     """
